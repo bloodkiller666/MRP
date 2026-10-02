@@ -1,0 +1,17 @@
+# Ajustes de pnpm para este repositorio (pnpm 11).
+#
+# pnpm bloquea por defecto los scripts de instalación (preinstall/install/
+# postinstall) de las dependencias y falla con ERR_PNPM_IGNORED_BUILDS mientras
+# alguna quede "sin revisar". `allowBuilds` es la lista de revisión:
+#
+#   true  -> el script se ejecuta
+#   false -> el script se bloquea a propósito (revisado y rechazado)
+#
+# Ambas dependencias se rechazan y la app funciona igual, así que mantenemos la
+# superficie de ataque al mínimo.
+allowBuilds:
+  # Su postinstall solo imprime un mensaje de financiación; no compila nada.
+  core-js: false
+  # Trae el binario nativo ya compilado en @unrs/resolver-binding-<plataforma>,
+  # por lo que no necesita construir nada al instalar.
+  unrs-resolver: false
