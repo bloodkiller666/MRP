@@ -81,7 +81,7 @@ export function SelectorConNuevo({
           className={cn(
             clasesInput,
             invalido && clasesInputInvalido,
-            "border-slate-900 dark:border-slate-400",
+            "border-accent",
           )}
         />
         <button
@@ -92,7 +92,7 @@ export function SelectorConNuevo({
             onChange("");
             setModoNuevo(false);
           }}
-          className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="shrink-0 rounded p-1.5 text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink"
         >
           <Undo2 className="size-3.5" />
         </button>
@@ -115,17 +115,17 @@ export function SelectorConNuevo({
       className={cn(
         clasesSelect,
         invalido && clasesInputInvalido,
-        !valor && "text-slate-400 dark:text-slate-500",
+        !valor && "text-ink-3",
         className,
       )}
     >
       <option value="">{opcionVacia}</option>
       {listaOpciones.map((opcion) => (
-        <option key={opcion} value={opcion} className="text-slate-900 dark:text-slate-100">
+        <option key={opcion} value={opcion} className="text-ink">
           {opcion}
         </option>
       ))}
-      <option value={VALOR_NUEVO} className="text-slate-900 dark:text-slate-100">
+      <option value={VALOR_NUEVO} className="text-ink">
         {ETIQUETA_NUEVO}
       </option>
     </select>

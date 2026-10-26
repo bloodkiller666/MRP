@@ -5,23 +5,20 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react
 import { cn } from "@/lib/utils";
 
 export const clasesInput =
-  "w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 " +
-  "placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 " +
-  "disabled:bg-slate-100 " +
-  "dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 " +
-  "dark:focus:border-slate-500 dark:focus:ring-slate-700";
+  "h-9 w-full rounded-[5px] border border-line-strong bg-surface px-2.5 text-sm text-ink " +
+  "placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 " +
+  "focus:ring-accent/25 disabled:bg-surface-2";
 
-export const clasesSelect = cn(clasesInput, "cursor-pointer pr-8");
+export const clasesSelect = cn(clasesInput, "cursor-pointer truncate pr-7");
 
 /** Borde rojo para controles inválidos (validación de formularios). */
-export const clasesInputInvalido =
-  "border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-700 dark:focus:border-red-600 dark:focus:ring-red-950";
+export const clasesInputInvalido = "border-bad focus:border-bad focus:ring-bad/20";
 
 interface CampoProps {
   etiqueta: string;
   htmlFor?: string;
   ayuda?: string;
-  /** Muestra un asterisco rojo junto a la etiqueta. */
+  /** Muestra un asterisco junto a la etiqueta. */
   requerido?: boolean;
   /** Mensaje de error; cuando existe reemplaza a la ayuda. */
   error?: string;
@@ -40,23 +37,20 @@ export function Campo({
   children,
 }: CampoProps) {
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <label
-        htmlFor={htmlFor}
-        className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"
-      >
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
+      <label htmlFor={htmlFor} className="rotulo text-ink-2">
         {etiqueta}
         {requerido ? (
-          <span className="ml-0.5 text-red-500 dark:text-red-400" aria-hidden>
+          <span className="ml-0.5 text-bad" aria-hidden>
             *
           </span>
         ) : null}
       </label>
       {children}
       {error ? (
-        <span className="text-xs text-red-600 dark:text-red-400">{error}</span>
+        <span className="text-xs text-bad">{error}</span>
       ) : ayuda ? (
-        <span className="text-xs text-slate-400 dark:text-slate-500">{ayuda}</span>
+        <span className="text-xs text-ink-3">{ayuda}</span>
       ) : null}
     </div>
   );

@@ -45,6 +45,28 @@ function establecer(siguiente: RegistroMRP[]) {
   notificar();
 }
 
+function esObjeto(valor: unknown): valor is Partial<RegistroMRP> {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+}
+
+/** Completa los campos que pudieran faltar en datos guardados por versiones anteriores. */
+function normalizar(registro: Partial<RegistroMRP>): RegistroMRP {
+  return {
+    id: registro.id ?? generarId(),
+    propietario: registro.propietario ?? "",
+    departamento: registro.departamento ?? "",
+    cuenta: registro.cuenta ?? "",
+    proyecto: registro.proyecto ?? "",
+    detalleProducto: registro.detalleProducto ?? "",
+    grupoLinea: registro.grupoLinea ?? "",
+    refineria: registro.refineria ?? "",
+    unidadMedida: registro.unidadMedida ?? "",
+    tipoAplicacion: registro.tipoAplicacion ?? "",
+    proyecciones: registro.proyecciones ?? {},
+    reales: registro.reales ?? {},
+  };
+}
+
 /** Carga la copia persistida la primera vez que un componente se suscribe. */
 function hidratar() {
   if (hidratado || typeof window === "undefined") return;
@@ -57,7 +79,7 @@ function hidratar() {
     const parseado: unknown = JSON.parse(crudo);
     // Una lista vacía es un estado válido (el usuario vació la tabla).
     if (Array.isArray(parseado)) {
-      estado = parseado as RegistroMRP[];
+      estado = parseado.filter(esObjeto).map(normalizar);
       notificar();
     }
   } catch {
@@ -121,12 +143,22 @@ export const mrpStore = {
     establecer(estado.map((registro) => (registro.id === id ? { ...registro, [campo]: valor } : registro)));
   },
 
-  /** Edición en celda de una proyección mensual. `undefined` limpia la celda. */
+  /** Edición en celda del pronóstico de un mes. `undefined` limpia la celda. */
   actualizarProyeccion(id: string, mes: MesKey, valor?: number): void {
     establecer(
       estado.map((registro) => {
         if (registro.id !== id) return registro;
         return { ...registro, proyecciones: { ...registro.proyecciones, [mes]: valor } };
+      }),
+    );
+  },
+
+  /** Edición en celda del despacho real (o avance) de un mes. `undefined` lo limpia. */
+  actualizarReal(id: string, mes: MesKey, valor?: number): void {
+    establecer(
+      estado.map((registro) => {
+        if (registro.id !== id) return registro;
+        return { ...registro, reales: { ...registro.reales, [mes]: valor } };
       }),
     );
   },

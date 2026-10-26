@@ -1,4 +1,4 @@
-import { COLUMNAS_OCULTABLES, COLUMNAS_STORAGE_KEY } from "./constants";
+import { COLUMNAS_OCULTABLES, COLUMNAS_OCULTAS_INICIALES, COLUMNAS_STORAGE_KEY } from "./constants";
 import type { ColumnaTabla } from "./types";
 
 /**
@@ -17,9 +17,9 @@ import type { ColumnaTabla } from "./types";
 const CLAVES_VALIDAS = new Set<string>(COLUMNAS_OCULTABLES);
 
 /** Instantánea inmutable del servidor (evita crear un array en cada render). */
-const COLUMNAS_OCULTAS_VACIAS: ColumnaTabla[] = [];
+const COLUMNAS_OCULTAS_POR_DEFECTO: ColumnaTabla[] = [...COLUMNAS_OCULTAS_INICIALES];
 
-let estado: ColumnaTabla[] = [];
+let estado: ColumnaTabla[] = COLUMNAS_OCULTAS_POR_DEFECTO;
 let hidratado = false;
 
 const oyentes = new Set<() => void>();
@@ -66,11 +66,9 @@ function hidratar() {
     const crudo = window.localStorage.getItem(COLUMNAS_STORAGE_KEY);
     if (!crudo) return;
 
-    const ocultas = depurar(JSON.parse(crudo));
-    if (ocultas.length > 0) {
-      estado = ocultas;
-      notificar();
-    }
+    // Una lista vacía es válida: el usuario eligió ver todas las columnas.
+    estado = depurar(JSON.parse(crudo));
+    notificar();
   } catch {
     // Datos corruptos: se continúa con todas las columnas visibles.
   }
@@ -91,9 +89,9 @@ export const columnasStore = {
     return estado;
   },
 
-  /** En el servidor todas las columnas se muestran. */
+  /** En el servidor se aplica la vista comercial por defecto. */
   obtenerInstantaneaServidor(): ColumnaTabla[] {
-    return COLUMNAS_OCULTAS_VACIAS;
+    return COLUMNAS_OCULTAS_POR_DEFECTO;
   },
 
   /** Muestra u oculta una columna concreta. */

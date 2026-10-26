@@ -5,67 +5,73 @@
  * por lo que estos tipos son la única "fuente de verdad" del modelo de datos.
  */
 
-/** Claves de los meses proyectados (formato corto en español, minúsculas). */
-export type MesKey = "ago" | "set" | "oct" | "nov" | "dic";
+/** Meses del horizonte de pronóstico (de octubre en adelante). */
+export type MesKey = "oct" | "nov" | "dic";
 
 /**
- * Proyección mensual de consumo.
- *
- * Se declaran los meses conocidos explícitamente para tener autocompletado,
- * pero se mantiene una firma de índice para permitir meses adicionales
- * (ej. "ene", "feb") sin romper el modelo.
+ * Cantidades por mes, en la unidad de medida (UM) del registro.
+ * Un mes sin dato queda `undefined`, lo que lo distingue de un cero explícito.
  */
-export interface Proyecciones {
-  ago?: number;
-  set?: number;
-  oct?: number;
-  nov?: number;
-  dic?: number;
-  [key: string]: number | undefined;
-}
+export type CantidadesMes = Partial<Record<MesKey, number>>;
 
-/** Registro individual de la planificación de requerimientos de materiales. */
+/** Registro individual: un cliente + producto asignado a un vendedor. */
 export interface RegistroMRP {
   id: string;
+  /** Vendedor responsable de la cuenta. */
   propietario: string;
   departamento: string;
+  /** Cliente (en el Excel de origen se llama «Cuenta»). */
   cuenta: string;
   proyecto: string;
   detalleProducto: string;
   grupoLinea: string;
   refineria: string;
   unidadMedida: string;
-  proyecciones: Proyecciones;
+  tipoAplicacion: string;
+  /** Pronóstico de demanda por mes. */
+  proyecciones: CantidadesMes;
+  /** Despacho real (meses cerrados) + avance (mes en curso). */
+  reales: CantidadesMes;
 }
 
-/** Campos de texto editables de un registro (excluye `id` y `proyecciones`). */
-export type CampoTextoMRP = Exclude<keyof RegistroMRP, "id" | "proyecciones">;
+/** Campos de texto editables de un registro. */
+export type CampoTextoMRP = Exclude<keyof RegistroMRP, "id" | "proyecciones" | "reales">;
 
 /**
- * Cualquier columna de datos de la tabla (un campo de texto o un mes).
- *
- * Es el conjunto de columnas que el usuario puede **ocultar** para despejar la
- * vista. Las columnas de total ("Total" por fila y "Acciones") no se ocultan.
+ * Columnas de datos que el usuario puede **ocultar** para despejar la vista.
+ * Los meses se controlan con el filtro «Pronóstico hasta», no con este selector.
  */
-export type ColumnaTabla = CampoTextoMRP | MesKey;
+export type ColumnaTabla = CampoTextoMRP;
+
+/** Clave de una columna de despacho real al mapear un Excel (`real_oct`…). */
+export type ClaveReal = `real_${MesKey}`;
 
 /** Cualquier columna "destino" al mapear un archivo Excel. */
-export type CampoDestino = CampoTextoMRP | MesKey;
+export type CampoDestino = CampoTextoMRP | MesKey | ClaveReal;
 
 /** Filtros por columna. La cadena vacía significa "sin filtro". */
 export type FiltrosMRP = Record<CampoTextoMRP, string>;
 
-/**
- * Catálogo global de valores disponibles por campo.
- *
- * Se siembra con los catálogos de `lib/constants.ts` y crece con cada valor
- * inédito que el usuario guarda (tanto en el alta manual como en los cambios de
- * la tabla), de modo que los filtros y los formularios lo ofrezcan al instante.
- */
+/** Catálogo global de valores disponibles por campo. */
 export type CatalogoMRP = Record<CampoTextoMRP, string[]>;
 
 /** Tema visual activo de la aplicación. */
 export type Tema = "claro" | "oscuro";
+
+/**
+ * Estado del semáforo de cumplimiento.
+ * `sin-real` = todavía no hay despacho cargado; `sin-demanda` = sin pronóstico en el periodo.
+ */
+export type EstadoCumplimiento = "verde" | "amarillo" | "rojo" | "sin-real" | "sin-demanda";
+
+/** Resultado de comparar la demanda pronosticada con lo despachado. */
+export interface Cumplimiento {
+  demanda: number;
+  real: number;
+  /** Real ÷ demanda (1 = 100 %). `null` si no se puede calcular. */
+  ratio: number | null;
+  estado: EstadoCumplimiento;
+}
 
 /** Mapeo detectado entre un encabezado del archivo y un campo del sistema. */
 export interface MapeoColumna {
@@ -75,6 +81,8 @@ export interface MapeoColumna {
   indice: number;
   /** Campo del sistema asociado (`null` si no se reconoció). */
   campo: CampoDestino | null;
+  /** `true` si otra columna con el mismo destino se impuso (se usa la última). */
+  duplicada?: boolean;
 }
 
 /** Resultado del parseo de un archivo Excel/CSV. */
@@ -85,7 +93,7 @@ export interface ResultadoImportacion {
   mapeo: MapeoColumna[];
   /** Encabezados que no se pudieron reconocer. */
   columnasNoReconocidas: string[];
-  /** Filas leídas pero descartadas por estar completamente vacías. */
+  /** Filas leídas pero descartadas por estar vacías o ser totales. */
   filasOmitidas: number;
   /** Mensajes no bloqueantes para mostrar al usuario. */
   advertencias: string[];

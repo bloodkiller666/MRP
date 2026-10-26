@@ -3,14 +3,14 @@
 import {
   BarChart3,
   CheckCircle2,
-  Cloud,
-  Database,
   Download,
+  FileSpreadsheet,
   FileText,
-  HardHat,
+  LayoutDashboard,
   Plus,
   RotateCcw,
-  Table as IconoTabla,
+  Route,
+  Table2,
   Trash2,
   Upload,
   X,
@@ -21,31 +21,48 @@ import { ColumnasSelector } from "@/components/ColumnasSelector";
 import { Dashboard } from "@/components/Dashboard";
 import { ExcelImportModal } from "@/components/ExcelImportModal";
 import { FiltersBar } from "@/components/FiltersBar";
+import { MenuDatos } from "@/components/MenuDatos";
 import { MRPTable } from "@/components/MRPTable";
 import { RegistroFormModal } from "@/components/RegistroFormModal";
 import { ReportModal } from "@/components/ReportModal";
-import { SummaryCards } from "@/components/SummaryCards";
+import { SelectorPeriodo, SummaryCards } from "@/components/SummaryCards";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Boton } from "@/components/ui/Boton";
 import { useCatalogo } from "@/hooks/use-catalogo";
 import { useColumnas } from "@/hooks/use-columnas";
 import { useMrpStore } from "@/hooks/use-mrp-store";
-import { CAMPOS_TEXTO, ETIQUETAS_CAMPO, FILTROS_INICIALES } from "@/lib/constants";
+import {
+  ANIO_PRONOSTICO,
+  CAMPOS_TEXTO,
+  ETIQUETAS_CAMPO,
+  ETIQUETAS_ESTADO,
+  FILTROS_INICIALES,
+} from "@/lib/constants";
 import { exportarRegistrosExcel } from "@/lib/excel";
-import { combinarOpciones, filtrarRegistros, filtrosActivos, opcionesUnicas } from "@/lib/mrp-utils";
+import {
+  combinarOpciones,
+  cumplimientoRegistro,
+  etiquetaPeriodo,
+  filtrarRegistros,
+  filtrosActivos,
+  mesesHasta,
+  opcionesUnicas,
+} from "@/lib/mrp-utils";
 import { exportarRegistrosPDF } from "@/lib/pdfExport";
-import type { CampoTextoMRP, FiltrosMRP, RegistroMRP } from "@/lib/types";
+import type { CampoTextoMRP, EstadoCumplimiento, FiltrosMRP, MesKey, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** Vistas principales de la aplicación, alternables con pestañas. */
-type Vista = "tabla" | "dashboard";
+type Vista = "seguimiento" | "analisis";
+
+const clasesBotonCabecera =
+  "inline-flex h-9 items-center gap-2 rounded-[5px] px-3.5 text-sm font-semibold whitespace-nowrap transition-colors";
 
 /**
  * Raíz de la aplicación MRP (Client Component).
  *
- * Concentra el estado (vía `useMrpStore` y `useCatalogo`), los filtros activos y
- * la apertura de modales; la presentación se delega en `SummaryCards`,
- * `FiltersBar` y `MRPTable`.
+ * Concentra el estado (vía `useMrpStore` y `useCatalogo`), los filtros activos
+ * (incluidos el periodo y el semáforo) y la apertura de modales; la presentación
+ * se delega en `SummaryCards`, `FiltersBar`, `MRPTable` y `Dashboard`.
  */
 export function MRPApp() {
   const {
@@ -56,6 +73,7 @@ export function MRPApp() {
     actualizar,
     actualizarCampo,
     actualizarProyeccion,
+    actualizarReal,
     eliminar,
     restaurar,
     vaciar,
@@ -63,15 +81,13 @@ export function MRPApp() {
 
   const { catalogo, registrarVarios, restaurar: restaurarCatalogo } = useCatalogo();
 
-  const {
-    ocultas,
-    alternar: alternarColumna,
-    mostrarTodas: mostrarTodasColumnas,
-  } = useColumnas();
+  const { ocultas, alternar: alternarColumna, mostrarTodas: mostrarTodasColumnas } = useColumnas();
 
   const [filtros, setFiltros] = useState<FiltrosMRP>(FILTROS_INICIALES);
   const [busqueda, setBusqueda] = useState("");
-  const [vista, setVista] = useState<Vista>("tabla");
+  const [hasta, setHasta] = useState<MesKey>("dic");
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoCumplimiento | "">("");
+  const [vista, setVista] = useState<Vista>("seguimiento");
   const [modalImportar, setModalImportar] = useState(false);
   const [modalReporte, setModalReporte] = useState(false);
   const [modalFormulario, setModalFormulario] = useState(false);
@@ -81,16 +97,26 @@ export function MRPApp() {
 
   /* ----------------------------- Datos derivados ---------------------------- */
 
-  const registrosFiltrados = useMemo(
+  const meses = useMemo(() => mesesHasta(hasta), [hasta]);
+
+  /** Vista con todos los filtros salvo el semáforo: base de los contadores del semáforo. */
+  const registrosParaSemaforo = useMemo(
     () => filtrarRegistros(registros, filtros, busqueda),
     [registros, filtros, busqueda],
+  );
+
+  const registrosFiltrados = useMemo(
+    () =>
+      estadoFiltro
+        ? registrosParaSemaforo.filter((r) => cumplimientoRegistro(r, meses).estado === estadoFiltro)
+        : registrosParaSemaforo,
+    [registrosParaSemaforo, estadoFiltro, meses],
   );
 
   /**
    * Opciones por campo: el catálogo global (semilla + lo que el usuario guardó)
    * unido a los valores realmente presentes en la tabla. Es la misma lista para
-   * los filtros y para los selectores del formulario, así un valor nuevo aparece
-   * en ambos sin recargar la página.
+   * los filtros y para los selectores del formulario.
    */
   const opciones = useMemo(() => {
     const mapa = {} as Record<CampoTextoMRP, string[]>;
@@ -101,10 +127,11 @@ export function MRPApp() {
   }, [registros, catalogo]);
 
   /** Descripción textual de los filtros activos, para el encabezado del PDF. */
-  const filtrosComoTexto = useMemo(
-    () => filtrosActivos(filtros).map(([campo, valor]) => `${ETIQUETAS_CAMPO[campo]}: ${valor}`),
-    [filtros],
-  );
+  const filtrosComoTexto = useMemo(() => {
+    const textos = filtrosActivos(filtros).map(([campo, valor]) => `${ETIQUETAS_CAMPO[campo]}: ${valor}`);
+    if (estadoFiltro) textos.push(`Semáforo: ${ETIQUETAS_ESTADO[estadoFiltro]}`);
+    return textos;
+  }, [filtros, estadoFiltro]);
 
   /* ------------------------------- Avisos (UI) ------------------------------ */
 
@@ -121,6 +148,7 @@ export function MRPApp() {
   const alLimpiarFiltros = () => {
     setFiltros(FILTROS_INICIALES);
     setBusqueda("");
+    setEstadoFiltro("");
   };
 
   const alImportar = (nuevos: RegistroMRP[]) => {
@@ -137,7 +165,7 @@ export function MRPApp() {
       return;
     }
     try {
-      await exportarRegistrosExcel({ registros: registrosAExportar });
+      await exportarRegistrosExcel({ registros: registrosAExportar, hasta });
       mostrarAviso(`Exportados ${registrosAExportar.length} registros a Excel.`);
     } catch {
       mostrarAviso("Ocurrió un error al generar el archivo de Excel.");
@@ -153,6 +181,7 @@ export function MRPApp() {
     try {
       await exportarRegistrosPDF({
         registros: registrosFiltrados,
+        hasta,
         filtrosAplicados: filtrosComoTexto,
         busqueda,
         columnasOcultas: ocultas,
@@ -200,228 +229,243 @@ export function MRPApp() {
   const alRestaurar = () => {
     if (
       !window.confirm(
-        "Esto reemplaza los datos actuales por los 8 registros de ejemplo y restablece el catálogo de valores. ¿Continuar?",
+        "Esto reemplaza los datos actuales por los 85 registros del Excel de origen (pronóstico Oct–Dic 2026) " +
+          "y restablece el catálogo de valores. ¿Continuar?",
       )
     ) {
       return;
     }
     restaurar();
     restaurarCatalogo();
-    mostrarAviso("Datos de ejemplo y catálogo restaurados.");
+    mostrarAviso("Datos originales y catálogo restaurados.");
   };
 
   const alVaciar = () => {
     if (!window.confirm("¿Vaciar toda la tabla? Se perderán todos los registros.")) return;
     vaciar();
-    mostrarAviso("Tabla vaciada. Puedes importar un Excel o restaurar los ejemplos.");
+    mostrarAviso("Tabla vaciada. Puedes importar un Excel o restaurar los datos originales.");
   };
+
+  const sinResultados = registrosFiltrados.length === 0;
 
   /* ---------------------------------- Render -------------------------------- */
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-100 dark:bg-slate-950">
-      <header className="border-b border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center justify-between gap-4 px-4 py-3.5">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-700">
-              <HardHat className="size-5 text-white" />
+    <div className="flex min-h-screen flex-col">
+      {/* ------------------------------ Cabecera ------------------------------ */}
+      <header className="sticky top-0 z-30 bg-chrome text-chrome-ink">
+        <div className="mx-auto flex w-full max-w-[112rem] items-center justify-between gap-3 px-4 pt-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[5px] border border-chrome-line bg-chrome-2">
+              <Route className="size-[18px] text-chrome-ink" strokeWidth={1.75} />
             </span>
-            <div>
-              <h1 className="text-base leading-tight font-semibold text-slate-900 dark:text-white">
-                MRP · Planificación de Requerimientos de Materiales
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Proyección mensual de insumos asfálticos · Apurímac, Cusco, Lima y más
+            <div className="min-w-0">
+              <h1 className="truncate text-[15px] leading-tight font-semibold">Planificación de suministro</h1>
+              <p className="truncate text-xs text-chrome-ink-2">
+                Asfaltos y emulsiones · Demanda {ANIO_PRONOSTICO}
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Boton
-              variante="primario"
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
               onClick={abrirNuevo}
-              icono={<Plus className="size-4" />}
+              className={cn(clasesBotonCabecera, "bg-chrome-ink text-chrome hover:bg-white")}
             >
-              Agregar registro
-            </Boton>
-            <Boton
-              onClick={() => setModalImportar(true)}
-              icono={<Upload className="size-4" />}
-            >
-              Importar Excel
-            </Boton>
-            <Boton
-              onClick={() => void alExportar()}
-              disabled={registrosFiltrados.length === 0}
-              icono={<Download className="size-4" />}
-            >
-              Exportar Excel
-            </Boton>
-            <Boton
-              onClick={() => void alExportarPdf()}
-              disabled={registrosFiltrados.length === 0 || exportandoPdf}
-              icono={<FileText className="size-4" />}
-            >
-              {exportandoPdf ? "Generando PDF…" : "Exportar a PDF"}
-            </Boton>
-            <Boton
-              onClick={() => setModalReporte(true)}
-              disabled={registrosFiltrados.length === 0}
-              icono={<BarChart3 className="size-4" />}
-            >
-              Reporte rápido
-            </Boton>
+              <Plus className="size-4" strokeWidth={2.25} />
+              <span className="hidden sm:inline">Nuevo registro</span>
+              <span className="sm:hidden">Nuevo</span>
+            </button>
+
+            <MenuDatos
+              opciones={[
+                {
+                  etiqueta: "Importar Excel",
+                  detalle: "Anexa filas; reconoce el formato «Base de datos»",
+                  icono: <Upload className="size-4" />,
+                  alElegir: () => setModalImportar(true),
+                },
+                {
+                  etiqueta: "Exportar a Excel",
+                  detalle: "Vista actual con pronóstico, real y cumplimiento",
+                  icono: <Download className="size-4" />,
+                  alElegir: () => void alExportar(),
+                  deshabilitada: sinResultados,
+                },
+                {
+                  etiqueta: exportandoPdf ? "Generando PDF…" : "Exportar a PDF",
+                  detalle: "Informe apaisado con semáforo",
+                  icono: <FileText className="size-4" />,
+                  alElegir: () => void alExportarPdf(),
+                  deshabilitada: sinResultados || exportandoPdf,
+                },
+                {
+                  etiqueta: "Reporte rápido",
+                  detalle: "Cumplimiento por vendedor y producto",
+                  icono: <BarChart3 className="size-4" />,
+                  alElegir: () => setModalReporte(true),
+                  deshabilitada: sinResultados,
+                },
+                {
+                  etiqueta: "Restaurar datos originales",
+                  detalle: "Vuelve a los 85 registros del Excel",
+                  icono: <RotateCcw className="size-4" />,
+                  alElegir: alRestaurar,
+                  separador: true,
+                },
+                {
+                  etiqueta: "Vaciar tabla",
+                  icono: <Trash2 className="size-4" />,
+                  alElegir: alVaciar,
+                  peligro: true,
+                },
+              ]}
+            />
             <ThemeToggle />
           </div>
         </div>
+
+        <nav
+          role="tablist"
+          aria-label="Vistas de la aplicación"
+          className="mx-auto mt-2 flex w-full max-w-[112rem] gap-1 px-4 sm:px-6"
+        >
+          {(
+            [
+              { clave: "seguimiento", etiqueta: "Seguimiento", icono: Table2 },
+              { clave: "analisis", etiqueta: "Análisis", icono: LayoutDashboard },
+            ] as const
+          ).map(({ clave, etiqueta, icono: Icono }) => {
+            const activa = vista === clave;
+            return (
+              <button
+                key={clave}
+                type="button"
+                role="tab"
+                aria-selected={activa}
+                onClick={() => setVista(clave)}
+                className={cn(
+                  "-mb-px inline-flex h-10 items-center gap-2 border-b-2 px-3.5 text-sm font-medium transition-colors",
+                  activa
+                    ? "border-chrome-ink text-chrome-ink"
+                    : "border-transparent text-chrome-ink-2 hover:text-chrome-ink",
+                )}
+              >
+                <Icono className="size-4" />
+                {etiqueta}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="border-b border-chrome-line" />
       </header>
 
-      <main className="mx-auto flex w-full max-w-[100rem] flex-1 flex-col gap-4 px-4 py-4">
-        {aviso ? (
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-            <p className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-              {aviso}
+      {/* ------------------------------ Contenido ----------------------------- */}
+      <main className="mx-auto flex w-full max-w-[112rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-ink">
+              {vista === "seguimiento" ? "Seguimiento de demanda y cumplimiento" : "Análisis del periodo"}
+            </h2>
+            <p className="mt-0.5 text-sm text-ink-2">
+              Pronóstico por UM de {etiquetaPeriodo(hasta, ANIO_PRONOSTICO)} · {meses.length}{" "}
+              {meses.length === 1 ? "mes" : "meses"} · comparado con real + avance
             </p>
-            <button
-              type="button"
-              onClick={() => setAviso(null)}
-              aria-label="Descartar aviso"
-              className="rounded p-0.5 text-emerald-700 transition-colors hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-900/60"
-            >
-              <X className="size-4" />
-            </button>
           </div>
-        ) : null}
+          <SelectorPeriodo hasta={hasta} alCambiar={setHasta} />
+        </div>
 
-        <SummaryCards registros={registrosFiltrados} />
+        <SummaryCards
+          registros={registrosFiltrados}
+          registrosParaSemaforo={registrosParaSemaforo}
+          hasta={hasta}
+          estadoFiltro={estadoFiltro}
+          alCambiarEstado={setEstadoFiltro}
+        />
 
         <FiltersBar
           busqueda={busqueda}
           alBuscar={setBusqueda}
           filtros={filtros}
-          alCambiarFiltro={(campo, valor) =>
-            setFiltros((previos) => ({ ...previos, [campo]: valor }))
-          }
+          alCambiarFiltro={(campo, valor) => setFiltros((previos) => ({ ...previos, [campo]: valor }))}
           opciones={opciones}
+          estadoFiltro={estadoFiltro}
+          etiquetaEstado={estadoFiltro ? ETIQUETAS_ESTADO[estadoFiltro] : ""}
+          alQuitarEstado={() => setEstadoFiltro("")}
           alLimpiar={alLimpiarFiltros}
           acciones={
-            <ColumnasSelector
-              ocultas={ocultas}
-              alAlternar={alternarColumna}
-              alMostrarTodas={mostrarTodasColumnas}
-            />
+            vista === "seguimiento" ? (
+              <ColumnasSelector
+                ocultas={ocultas}
+                alAlternar={alternarColumna}
+                alMostrarTodas={mostrarTodasColumnas}
+              />
+            ) : null
           }
         />
 
-        {/* Pestañas para alternar la vista de tabla con la vista analítica. */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div
-            role="tablist"
-            aria-label="Vistas de la aplicación"
-            className="inline-flex gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={vista === "tabla"}
-              onClick={() => setVista("tabla")}
-              className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors",
-                vista === "tabla"
-                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white",
-              )}
-            >
-              <IconoTabla className="size-4" />
-              Vista de Tabla (Data)
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={vista === "dashboard"}
-              onClick={() => setVista("dashboard")}
-              className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors",
-                vista === "dashboard"
-                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white",
-              )}
-            >
-              <BarChart3 className="size-4" />
-              Vista Analítica (Dashboard)
-            </button>
-          </div>
-
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            Los totales y gráficos reflejan siempre la vista filtrada actual.
-          </p>
-        </div>
-
-        {vista === "tabla" ? (
+        {vista === "seguimiento" ? (
           <MRPTable
             registros={registrosFiltrados}
             totalSinFiltrar={registros.length}
             ocultas={ocultas}
+            hasta={hasta}
             alActualizarCampo={actualizarCampo}
             alActualizarProyeccion={actualizarProyeccion}
+            alActualizarReal={actualizarReal}
             alEliminar={alEliminar}
             alEditarFila={abrirEdicion}
           />
         ) : (
-          <Dashboard registros={registrosFiltrados} />
+          <Dashboard registros={registrosFiltrados} hasta={hasta} />
         )}
       </main>
 
-      <footer className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+      <footer className="border-t border-line bg-surface">
+        <div className="mx-auto flex w-full max-w-[112rem] flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-3 text-xs text-ink-3 sm:px-6">
           <p className="flex items-center gap-1.5">
-            <Database className="size-3.5 text-slate-400 dark:text-slate-500" />
+            <FileSpreadsheet className="size-3.5" />
             {listo ? (
               <>
-                Estado guardado automáticamente en este navegador (localStorage) ·{" "}
-                <span className="font-medium text-slate-600 dark:text-slate-300">
-                  {registros.length} registro{registros.length === 1 ? "" : "s"} en total
+                Datos guardados en este navegador ·{" "}
+                <span className="font-medium text-ink-2">
+                  {registros.length} registro{registros.length === 1 ? "" : "s"}
                 </span>
               </>
             ) : (
               "Cargando datos guardados…"
             )}
           </p>
-
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
-              <Cloud className="size-3.5" />
-              Sin base de datos: todo en memoria del navegador
-            </span>
-            <Boton
-              tamano="sm"
-              variante="fantasma"
-              onClick={alRestaurar}
-              icono={<RotateCcw className="size-3.5" />}
-            >
-              Restaurar ejemplos
-            </Boton>
-            <Boton
-              tamano="sm"
-              variante="peligro"
-              onClick={alVaciar}
-              icono={<Trash2 className="size-3.5" />}
-            >
-              Vaciar
-            </Boton>
-          </div>
+          <p>Origen: Base de datos de consumo MP Asfaltos · Oct 2026</p>
         </div>
       </footer>
+
+      {/* Aviso tipo «toast». */}
+      {aviso ? (
+        <div
+          role="status"
+          className="fixed right-4 bottom-4 left-4 z-50 flex items-start justify-between gap-3 rounded-md border border-line-strong bg-chrome px-4 py-3 text-sm text-chrome-ink shadow-xl sm:left-auto sm:max-w-sm"
+        >
+          <p className="flex items-start gap-2">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ok" />
+            {aviso}
+          </p>
+          <button
+            type="button"
+            onClick={() => setAviso(null)}
+            aria-label="Descartar aviso"
+            className="rounded p-0.5 text-chrome-ink-2 transition-colors hover:text-chrome-ink"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : null}
 
       {/* Los modales se montan solo al abrirse: así cada apertura parte de un
           estado limpio sin necesidad de efectos de sincronización. */}
       {modalImportar ? (
-        <ExcelImportModal
-          abierto
-          onCerrar={() => setModalImportar(false)}
-          onImportar={alImportar}
-        />
+        <ExcelImportModal abierto onCerrar={() => setModalImportar(false)} onImportar={alImportar} />
       ) : null}
 
       {modalFormulario ? (
@@ -442,6 +486,7 @@ export function MRPApp() {
           abierto
           onCerrar={() => setModalReporte(false)}
           registros={registrosFiltrados}
+          hasta={hasta}
           onExportar={() => {
             setModalReporte(false);
             void alExportar();

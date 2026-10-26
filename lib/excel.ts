@@ -1,8 +1,9 @@
-import { ETIQUETA_TOTAL, ETIQUETAS_CAMPO, MESES } from "./constants";
-import { resumenPorCampo, totalFila, totalesPorMes } from "./mrp-utils";
+import { CAMPOS_TEXTO, ETIQUETA_TOTAL, ETIQUETAS_CAMPO, ETIQUETAS_ESTADO, MESES } from "./constants";
+import { cumplimientoRegistro, mesesHasta, resumirPeriodo, resumenPorCampo } from "./mrp-utils";
 import type {
   CampoDestino,
   CampoTextoMRP,
+  ClaveReal,
   MapeoColumna,
   MesKey,
   RegistroMRP,
@@ -22,11 +23,12 @@ import { generarId, normalizarClave, normalizarTexto, parsearNumero } from "./ut
 /* -------------------------------------------------------------------------- */
 
 /** Alias aceptados por campo de texto, comparados sin espacios ni acentos. */
-const ALIAS_CAMPOS: Record<string, CampoDestino> = {
+const ALIAS_CAMPOS: Record<string, CampoTextoMRP> = {
   propietario: "propietario",
   owner: "propietario",
   representante: "propietario",
   vendedor: "propietario",
+  responsable: "propietario",
   departamento: "departamento",
   dpto: "departamento",
   region: "departamento",
@@ -57,22 +59,23 @@ const ALIAS_CAMPOS: Record<string, CampoDestino> = {
   unidadmedida: "unidadMedida",
   unidadmed: "unidadMedida",
   uom: "unidadMedida",
+  tipoaplicacion: "tipoAplicacion",
+  aplicacion: "tipoAplicacion",
+  tipodeaplicacion: "tipoAplicacion",
 };
 
 /** Alias por mes, comparados sin espacios ni acentos. */
 const ALIAS_MESES: Record<MesKey, string[]> = {
-  ago: ["ago", "agost", "agosto", "aug", "august"],
-  set: ["set", "setiembre", "septiembre", "sept", "sep"],
-  oct: ["oct", "octubre"],
-  nov: ["nov", "noviembre"],
-  dic: ["dic", "diciembre", "dec"],
+  oct: ["oct", "octubre", "october"],
+  nov: ["nov", "noviembre", "november"],
+  dic: ["dic", "diciembre", "dec", "december"],
 };
 
-/** Prefijos que suelen acompañar al mes ("Proyección Agosto", "Consumo Sep"). */
-const PREFIJOS_IGNORADOS = /^(proyeccion|proy|consumo|requerimiento|req|mes|total)/;
+/** Prefijos que suelen acompañar al mes en las columnas de pronóstico. */
+const PREFIJOS_PRONOSTICO = /^(proyeccion|proy|pronostico|pron|demanda|consumo|requerimiento|req|mes)/;
 
-/** Claves de mes válidas, para distinguir meses de campos de texto al mapear. */
-const CLAVES_MES = new Set<string>(MESES.map((mes) => mes.key));
+/** Prefijos de las columnas de despacho real / avance. */
+const PREFIJOS_REAL = /^(real|avance|despacho|despachado|ejecutado)/;
 
 /**
  * Celdas que identifican una fila de totales del reporte original.
@@ -81,17 +84,12 @@ const CLAVES_MES = new Set<string>(MESES.map((mes) => mes.key));
  */
 const FILA_TOTALES = /^(total|totales|subtotal|gran total)$/;
 
-/**
- * Intenta asociar un encabezado a un mes.
- * Acepta variantes como `Ago`, `Agosto`, `ago-26`, `Proyección Agosto`, `Sep 2026`.
- */
-function mapearMes(clave: string): MesKey | null {
-  const limpio = clave.replace(PREFIJOS_IGNORADOS, "") || clave;
-
+/** Devuelve el mes al que corresponde un texto ya limpio de prefijos, o `null`. */
+function buscarMes(clave: string): MesKey | null {
   for (const mes of MESES) {
     for (const alias of ALIAS_MESES[mes.key]) {
-      // Coincidencia exacta o con sufijo de año (ago26 / agosto2026).
-      if (new RegExp(`^${alias}(\\d{2}|\\d{4})?$`).test(limpio)) return mes.key;
+      // Coincidencia exacta o con sufijo de año (oct26 / octubre2026).
+      if (new RegExp(`^${alias}(\\d{2}|\\d{4})?$`).test(clave)) return mes.key;
     }
   }
   return null;
@@ -102,17 +100,39 @@ export function mapearEncabezado(encabezado: string): CampoDestino | null {
   const clave = normalizarClave(encabezado);
   if (!clave) return null;
   if (ALIAS_CAMPOS[clave]) return ALIAS_CAMPOS[clave];
-  return mapearMes(clave);
+
+  if (PREFIJOS_REAL.test(clave)) {
+    const mes = buscarMes(clave.replace(PREFIJOS_REAL, ""));
+    return mes ? (`real_${mes}` as ClaveReal) : null;
+  }
+
+  return buscarMes(clave.replace(PREFIJOS_PRONOSTICO, "") || clave);
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Parseo de valores                                                          */
 /* -------------------------------------------------------------------------- */
 
-/** Limpia una celda de texto (evita "undefined" y espacios sobrantes). */
+/** Limpia una celda de texto. Un simple guion («-») cuenta como vacío. */
 function parsearTexto(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
-  return String(valor).replace(/\s+/g, " ").trim();
+  const texto = String(valor).replace(/\s+/g, " ").trim();
+  return /^[-–—]+$/.test(texto) ? "" : texto;
+}
+
+/** Cantidad de columnas reconocidas en una fila candidata a encabezado. */
+function contarReconocidas(fila: unknown[]): number {
+  return fila.filter((celda) => mapearEncabezado(String(celda ?? ""))).length;
+}
+
+/** Cantidad de campos **distintos** reconocidos: puntúa qué hoja encaja mejor con el modelo. */
+function contarCamposDistintos(fila: unknown[]): number {
+  const campos = new Set<CampoDestino>();
+  for (const celda of fila) {
+    const campo = mapearEncabezado(String(celda ?? ""));
+    if (campo) campos.add(campo);
+  }
+  return campos.size;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -147,8 +167,7 @@ function detectarFilaEncabezado(filas: unknown[][]): number {
   const limite = Math.min(filas.length, 15);
 
   for (let i = 0; i < limite; i++) {
-    const reconocidas = (filas[i] ?? []).filter((celda) => mapearEncabezado(String(celda ?? "")));
-    if (reconocidas.length >= 3) return i;
+    if (contarReconocidas(filas[i] ?? []) >= 3) return i;
   }
   return 0;
 }
@@ -156,6 +175,9 @@ function detectarFilaEncabezado(filas: unknown[][]): number {
 /**
  * Parsea un archivo Excel (`.xlsx`, `.xls`) o CSV y lo transforma en registros
  * del MRP.
+ *
+ * En libros con varias hojas elige la que mejor encaja con el modelo (la que
+ * más encabezados reconoce), así no importa en qué posición esté.
  *
  * **No sobrescribe nada**: devuelve las filas nuevas para que el llamador las
  * anexe al estado existente.
@@ -168,24 +190,30 @@ export async function parsearArchivoMRP(archivo: File): Promise<ResultadoImporta
     ? XLSX.read(await leerComoTexto(archivo), { type: "string" })
     : XLSX.read(new Uint8Array(await leerComoArrayBuffer(archivo)), { type: "array" });
 
-  const nombreHoja = libro.SheetNames[0];
-  if (!nombreHoja) throw new Error("El archivo no contiene hojas con datos.");
+  if (libro.SheetNames.length === 0) throw new Error("El archivo no contiene hojas con datos.");
 
-  const matriz = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets[nombreHoja], {
-    header: 1,
-    blankrows: false,
-    defval: "",
-  });
+  let mejor: { nombre: string; matriz: unknown[][]; puntaje: number } | null = null;
+  for (const nombre of libro.SheetNames) {
+    const matriz = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets[nombre], {
+      header: 1,
+      blankrows: false,
+      defval: "",
+    });
+    if (matriz.length === 0) continue;
+    const puntaje = contarCamposDistintos(matriz[detectarFilaEncabezado(matriz)] ?? []);
+    if (!mejor || puntaje > mejor.puntaje) mejor = { nombre, matriz, puntaje };
+  }
 
-  return mapearMatriz(matriz, nombreHoja);
+  if (!mejor) throw new Error("El archivo no contiene hojas con datos.");
+  return mapearMatriz(mejor.matriz, mejor.nombre);
 }
 
 /**
  * Núcleo del importador: convierte una matriz de celdas (con los encabezados en
  * alguna de las primeras filas) en registros del MRP.
  *
- * Es una función **pura**, independiente de la lectura de archivos, lo que
- * permite verificarla en aislamiento.
+ * Si varias columnas apuntan al mismo destino (p. ej. dos bloques «Oct», uno por
+ * año) se usa **la última**, que en los libros de planificación es la vigente.
  */
 export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): ResultadoImportacion {
   if (matriz.length === 0) throw new Error("La hoja está vacía.");
@@ -193,15 +221,31 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
   const indiceEncabezado = detectarFilaEncabezado(matriz);
   const encabezados = (matriz[indiceEncabezado] ?? []).map((celda) => parsearTexto(celda));
 
-  // Mapeo índice de columna -> campo del sistema.
   const mapeo: MapeoColumna[] = encabezados.map((encabezadoOriginal, indice) => ({
     encabezadoOriginal: encabezadoOriginal || `Columna ${indice + 1}`,
     indice,
     campo: mapearEncabezado(encabezadoOriginal),
   }));
 
+  // Si un destino aparece varias veces, solo la última columna queda activa.
+  const ultimaPorCampo = new Map<CampoDestino, number>();
+  for (const columna of mapeo) {
+    if (columna.campo) ultimaPorCampo.set(columna.campo, columna.indice);
+  }
+  for (const columna of mapeo) {
+    if (columna.campo && ultimaPorCampo.get(columna.campo) !== columna.indice) {
+      columna.duplicada = true;
+    }
+  }
+  const activas = mapeo.filter((columna) => columna.campo && !columna.duplicada);
+
   const columnasNoReconocidas = mapeo
-    .filter((columna) => columna.campo === null && columna.encabezadoOriginal.trim() !== "")
+    .filter(
+      (columna) =>
+        columna.campo === null &&
+        columna.encabezadoOriginal.trim() !== "" &&
+        !columna.encabezadoOriginal.startsWith("Columna "),
+    )
     .map((columna) => columna.encabezadoOriginal);
 
   const advertencias: string[] = [];
@@ -210,18 +254,21 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
       `Se detectó la fila de encabezados en la posición ${indiceEncabezado + 1} (había títulos arriba).`,
     );
   }
+  if (mapeo.some((columna) => columna.duplicada)) {
+    advertencias.push("Hay columnas repetidas (p. ej. un bloque por año): se usó la última de cada una.");
+  }
+  if (!activas.some((columna) => columna.campo === "tipoAplicacion")) {
+    advertencias.push("El archivo no trae «Tipo de aplicación»: quedará vacío para completarlo en la tabla.");
+  }
+  if (!activas.some((columna) => String(columna.campo).startsWith("real_"))) {
+    advertencias.push("El archivo no trae columnas de despacho real («Real Oct»…): el cumplimiento quedará «Sin real».");
+  }
 
   const registros: RegistroMRP[] = [];
   let filasOmitidas = 0;
 
   for (let fila = indiceEncabezado + 1; fila < matriz.length; fila++) {
     const celdas = matriz[fila] ?? [];
-
-    const esFilaVacia = celdas.every((celda) => parsearTexto(celda) === "");
-    if (esFilaVacia) {
-      filasOmitidas += 1;
-      continue;
-    }
 
     const registro: RegistroMRP = {
       id: generarId(),
@@ -233,34 +280,37 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
       grupoLinea: "",
       refineria: "",
       unidadMedida: "",
+      tipoAplicacion: "",
       proyecciones: {},
+      reales: {},
     };
 
-    for (const columna of mapeo) {
-      if (!columna.campo) continue;
+    for (const columna of activas) {
+      const campo = columna.campo as CampoDestino;
       const valor = celdas[columna.indice];
 
-      if (CLAVES_MES.has(columna.campo as MesKey)) {
+      if (campo.startsWith("real_")) {
         const numero = parsearNumero(valor);
-        if (numero !== undefined) registro.proyecciones[columna.campo as MesKey] = numero;
+        if (numero !== undefined) registro.reales[campo.slice(5) as MesKey] = numero;
+      } else if (campo === "oct" || campo === "nov" || campo === "dic") {
+        const numero = parsearNumero(valor);
+        if (numero !== undefined) registro.proyecciones[campo] = numero;
       } else {
-        registro[columna.campo as CampoTextoMRP] = parsearTexto(valor);
+        registro[campo as CampoTextoMRP] = parsearTexto(valor);
       }
     }
 
-    // Descarta las filas de totales del reporte y los renglones sin producto
-    // ni cuenta (no representan un requerimiento real).
-    const esFilaDeTotales = celdas.some((celda) =>
-      FILA_TOTALES.test(normalizarTexto(celda)),
-    );
-    const sinProductoNiCuenta = !registro.detalleProducto && !registro.cuenta;
-    if (esFilaDeTotales || sinProductoNiCuenta) {
+    // Se descartan filas vacías, de totales y renglones sin producto ni cantidades
+    // (notas sueltas del Excel que no representan un requerimiento).
+    const esFilaDeTotales = celdas.some((celda) => FILA_TOTALES.test(normalizarTexto(celda)));
+    const tieneCantidades =
+      Object.keys(registro.proyecciones).length > 0 || Object.keys(registro.reales).length > 0;
+    const sinContenido = !registro.detalleProducto && !tieneCantidades;
+    const sinIdentidad = !registro.detalleProducto && !registro.cuenta;
+
+    if (esFilaDeTotales || sinContenido || sinIdentidad) {
       filasOmitidas += 1;
       continue;
-    }
-
-    if (!registro.detalleProducto) {
-      advertencias.push(`Fila ${fila + 1}: sin "Detalle Producto", se importó igual.`);
     }
 
     registros.push(registro);
@@ -269,7 +319,7 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
   if (registros.length === 0) {
     throw new Error(
       "No se encontraron filas válidas. Verifica que el archivo tenga los encabezados " +
-        "(Propietario, Departamento, Cuenta, Proyecto, Detalle Producto, Grupo Línea, Refinería, UM, Ago, Set, Oct, Nov, Dic).",
+        "(Propietario, Cliente/Cuenta, Detalle Producto, Tipo de aplicación, UM, Oct, Nov, Dic).",
     );
   }
 
@@ -289,89 +339,120 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
 
 export interface OpcionesExportacion {
   registros: RegistroMRP[];
+  /** Meses del periodo que se exporta (de Oct hasta el mes elegido). */
+  hasta?: MesKey;
   /** Nombre del archivo sin extensión. Se agrega la fecha automáticamente. */
   nombreArchivo?: string;
-  /** Incluye una hoja "Resumen" con agrupaciones por grupo línea y refinería. */
+  /** Incluye una hoja "Resumen" con el cumplimiento por vendedor y producto. */
   incluirResumen?: boolean;
 }
 
-/** Construye la hoja principal (una fila por registro + fila de totales). */
+/** Hoja principal: una fila por registro con pronóstico, real y cumplimiento. */
 function construirHojaPrincipal(
   XLSX: typeof import("xlsx"),
   registros: RegistroMRP[],
+  hasta: MesKey,
 ) {
+  const meses = mesesHasta(hasta);
+  const etiquetaMes = (clave: MesKey) => MESES.find((mes) => mes.key === clave)?.label ?? clave;
+
   const encabezados = [
-    ...Object.values(ETIQUETAS_CAMPO),
-    ...MESES.map((mes) => mes.label),
-    "Total",
+    ...CAMPOS_TEXTO.map((campo) => ETIQUETAS_CAMPO[campo]),
+    ...meses.map((mes) => `Pronóstico ${etiquetaMes(mes)}`),
+    ...meses.map((mes) => `Real ${etiquetaMes(mes)}`),
+    "Total demanda",
+    "Real + avance",
+    "Cumplimiento",
+    "Semáforo",
   ];
 
   const filas = registros.map((registro) => {
     const fila: Record<string, string | number> = {};
-    for (const [campo, etiqueta] of Object.entries(ETIQUETAS_CAMPO)) {
-      fila[etiqueta] = registro[campo as keyof typeof ETIQUETAS_CAMPO] as string;
+    for (const campo of CAMPOS_TEXTO) fila[ETIQUETAS_CAMPO[campo]] = registro[campo];
+    for (const mes of meses) {
+      const pron = registro.proyecciones[mes];
+      const real = registro.reales[mes];
+      if (pron !== undefined) fila[`Pronóstico ${etiquetaMes(mes)}`] = pron;
+      if (real !== undefined) fila[`Real ${etiquetaMes(mes)}`] = real;
     }
-    for (const mes of MESES) {
-      const valor = registro.proyecciones[mes.key];
-      if (valor !== undefined) fila[mes.label] = valor;
-    }
-    fila["Total"] = totalFila(registro);
+    const c = cumplimientoRegistro(registro, meses);
+    fila["Total demanda"] = c.demanda;
+    fila["Real + avance"] = c.real;
+    if (c.ratio !== null) fila["Cumplimiento"] = Number(c.ratio.toFixed(4));
+    fila["Semáforo"] = ETIQUETAS_ESTADO[c.estado];
     return fila;
   });
 
-  // Fila de totales por mes.
-  const totales = totalesPorMes(registros);
+  const resumen = resumirPeriodo(registros, meses);
   const filaTotales: Record<string, string | number> = { [ETIQUETAS_CAMPO.propietario]: ETIQUETA_TOTAL };
-  let totalGlobal = 0;
-  for (const mes of MESES) {
-    filaTotales[mes.label] = totales[mes.key];
-    totalGlobal += totales[mes.key];
+  for (const mes of meses) {
+    filaTotales[`Pronóstico ${etiquetaMes(mes)}`] = resumen.porMes[mes].demanda;
+    if (resumen.porMes[mes].conReal) filaTotales[`Real ${etiquetaMes(mes)}`] = resumen.porMes[mes].real;
   }
-  filaTotales["Total"] = totalGlobal;
+  filaTotales["Total demanda"] = resumen.demanda;
+  filaTotales["Real + avance"] = resumen.real;
+  if (resumen.ratio !== null) filaTotales["Cumplimiento"] = Number(resumen.ratio.toFixed(4));
   filas.push(filaTotales);
 
   const hoja = XLSX.utils.json_to_sheet(filas, { header: encabezados });
 
-  // Anchos de columna legibles en Excel.
+  // Cumplimiento con formato de porcentaje.
+  const columnaCumplimiento = encabezados.indexOf("Cumplimiento");
+  for (let fila = 1; fila <= filas.length; fila++) {
+    const celda = hoja[XLSX.utils.encode_cell({ r: fila, c: columnaCumplimiento })];
+    if (celda) celda.z = "0%";
+  }
+
   hoja["!cols"] = encabezados.map((encabezado) => {
-    if (encabezado === "Detalle Producto") return { wch: 30 };
-    if (encabezado === "Cuenta") return { wch: 26 };
-    if (MESES.some((mes) => mes.label === encabezado) || encabezado === "Total") {
-      return { wch: 12 };
+    if (encabezado === ETIQUETAS_CAMPO.cuenta || encabezado === ETIQUETAS_CAMPO.proyecto) return { wch: 32 };
+    if (encabezado === ETIQUETAS_CAMPO.detalleProducto || encabezado === ETIQUETAS_CAMPO.propietario) {
+      return { wch: 26 };
     }
-    return { wch: 18 };
+    return { wch: 14 };
   });
 
   return hoja;
 }
 
-/** Construye la hoja de resumen (grupo línea + refinería). */
-function construirHojaResumen(XLSX: typeof import("xlsx"), registros: RegistroMRP[]) {
+/** Hoja de resumen: cumplimiento por vendedor, por producto y por unidad de medida. */
+function construirHojaResumen(XLSX: typeof import("xlsx"), registros: RegistroMRP[], hasta: MesKey) {
+  const meses = mesesHasta(hasta);
   const filas: Array<Record<string, string | number>> = [];
 
   const agregarGrupo = (titulo: string, campo: CampoTextoMRP) => {
-    const resumen = resumenPorCampo(registros, campo);
-    const total = resumen.reduce((acc, fila) => acc + fila.total, 0);
-    for (const fila of resumen) {
+    for (const fila of resumenPorCampo(registros, campo, meses)) {
       filas.push({
         Agrupación: titulo,
         Concepto: fila.etiqueta,
         Registros: fila.registros,
-        Total: fila.total,
-        "%": Number(fila.porcentaje.toFixed(2)),
+        "Total demanda": fila.demanda,
+        "Real + avance": fila.real,
+        Cumplimiento: fila.ratio === null ? "" : Number(fila.ratio.toFixed(4)),
+        Semáforo: ETIQUETAS_ESTADO[fila.estado],
       });
     }
-    filas.push({ Agrupación: titulo, Concepto: ETIQUETA_TOTAL, Registros: registros.length, Total: total, "%": 100 });
   };
 
-  agregarGrupo("Por Grupo Línea", "grupoLinea");
-  agregarGrupo("Por Refinería", "refineria");
-  agregarGrupo("Por Unidad de Medida", "unidadMedida");
+  agregarGrupo("Por vendedor", "propietario");
+  agregarGrupo("Por producto", "detalleProducto");
+  agregarGrupo("Por unidad de medida", "unidadMedida");
 
-  const hoja = XLSX.utils.json_to_sheet(filas, {
-    header: ["Agrupación", "Concepto", "Registros", "Total", "%"],
-  });
-  hoja["!cols"] = [{ wch: 24 }, { wch: 32 }, { wch: 12 }, { wch: 16 }, { wch: 10 }];
+  const encabezados = [
+    "Agrupación",
+    "Concepto",
+    "Registros",
+    "Total demanda",
+    "Real + avance",
+    "Cumplimiento",
+    "Semáforo",
+  ];
+  const hoja = XLSX.utils.json_to_sheet(filas, { header: encabezados });
+  const columna = encabezados.indexOf("Cumplimiento");
+  for (let fila = 1; fila <= filas.length; fila++) {
+    const celda = hoja[XLSX.utils.encode_cell({ r: fila, c: columna })];
+    if (celda && typeof celda.v === "number") celda.z = "0%";
+  }
+  hoja["!cols"] = [{ wch: 22 }, { wch: 34 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
   return hoja;
 }
 
@@ -383,21 +464,22 @@ function construirHojaResumen(XLSX: typeof import("xlsx"), registros: RegistroMR
  */
 export async function construirLibroMRP(
   registros: RegistroMRP[],
+  hasta: MesKey = "dic",
   incluirResumen = true,
 ): Promise<ArrayBuffer> {
   const XLSX = await import("xlsx");
   const libro = XLSX.utils.book_new();
 
-  XLSX.utils.book_append_sheet(libro, construirHojaPrincipal(XLSX, registros), "MRP");
+  XLSX.utils.book_append_sheet(libro, construirHojaPrincipal(XLSX, registros, hasta), "Seguimiento");
   if (incluirResumen) {
-    XLSX.utils.book_append_sheet(libro, construirHojaResumen(XLSX, registros), "Resumen");
+    XLSX.utils.book_append_sheet(libro, construirHojaResumen(XLSX, registros, hasta), "Resumen");
   }
 
   return XLSX.write(libro, { bookType: "xlsx", type: "array", compression: true }) as ArrayBuffer;
 }
 
 /** Nombre del archivo exportado, con la fecha del día. */
-export function nombreArchivoExportado(base = "MRP_Proyecciones"): string {
+export function nombreArchivoExportado(base = "MRP_Seguimiento"): string {
   return `${base}_${new Date().toISOString().slice(0, 10)}.xlsx`;
 }
 
@@ -423,10 +505,11 @@ function descargarArchivo(datos: ArrayBuffer, nombre: string): void {
  */
 export async function exportarRegistrosExcel({
   registros,
-  nombreArchivo = "MRP_Proyecciones",
+  hasta = "dic",
+  nombreArchivo = "MRP_Seguimiento",
   incluirResumen = true,
 }: OpcionesExportacion): Promise<void> {
-  const datos = await construirLibroMRP(registros, incluirResumen);
+  const datos = await construirLibroMRP(registros, hasta, incluirResumen);
   descargarArchivo(datos, nombreArchivoExportado(nombreArchivo));
 }
 

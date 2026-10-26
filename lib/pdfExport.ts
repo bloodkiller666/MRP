@@ -1,83 +1,72 @@
-import { ETIQUETAS_CAMPO, MESES } from "./constants";
-import { formatearNumero, resumenPorCampo, totalFila, totalesPorMes } from "./mrp-utils";
-import type { ColumnaTabla, MesKey, RegistroMRP } from "./types";
+import { ANIO_PRONOSTICO, ETIQUETAS_CAMPO, ETIQUETAS_ESTADO, MESES, REGLA_ESTADO } from "./constants";
+import {
+  cumplimientoRegistro,
+  etiquetaPeriodo,
+  formatearNumero,
+  formatearPorcentaje,
+  mesesHasta,
+  resumirPeriodo,
+  totalesPorUnidad,
+} from "./mrp-utils";
+import type { CampoTextoMRP, ColumnaTabla, EstadoCumplimiento, MesKey, RegistroMRP } from "./types";
 
 /**
  * Exportación a PDF (jsPDF + jspdf-autotable).
  *
- * Ambas librerías se cargan de forma **dinámica** para que no entren en el
- * bundle inicial: sólo se descargan cuando el usuario pulsa "Exportar a PDF".
- *
- * El documento se genera en **horizontal (landscape)**, con encabezado formal,
- * la tabla de la vista actual (respeta los filtros activos) y un bloque final
- * con los totales por mes (Ago–Dic) y por unidad de medida.
+ * Ambas librerías se cargan de forma **dinámica**: solo se descargan cuando el
+ * usuario pulsa «Exportar a PDF». El documento es apaisado (A4) con encabezado,
+ * la tabla de la vista actual (respeta filtros, periodo y semáforo) y un bloque
+ * final con los totales del periodo y por unidad de medida.
  */
 
 /** Título formal que encabeza el reporte. */
-export const TITULO_REPORTE = "Reporte de Proyección de Materiales (MRP)";
+export const TITULO_REPORTE = "Seguimiento de Demanda y Cumplimiento";
 
 /** Campos de texto que se imprimen, en el mismo orden que la tabla en pantalla. */
-const COLUMNAS_TEXTO = [
+const COLUMNAS_TEXTO: CampoTextoMRP[] = [
   "propietario",
-  "departamento",
   "cuenta",
-  "proyecto",
   "detalleProducto",
+  "tipoAplicacion",
+  "unidadMedida",
+  "departamento",
+  "proyecto",
   "grupoLinea",
   "refineria",
-  "unidadMedida",
-] as const satisfies ReadonlyArray<keyof typeof ETIQUETAS_CAMPO>;
+];
 
-/**
- * Ancho (pt) reservado a cada columna de texto.
- *
- * El ancho de los meses no se fija aquí: se calcula con el espacio restante de
- * la página (ver `calcularAnchos`), de modo que la suma de todas las columnas
- * coincida exactamente con el ancho útil y la tabla no desborde ni deje huecos.
- */
-const ANCHOS_TEXTO: Record<string, number> = {
-  Propietario: 62,
-  Departamento: 54,
-  Cuenta: 82,
-  Proyecto: 62,
-  "Detalle Producto": 100,
-  "Grupo Línea": 80,
-  Refinería: 58,
-  UM: 32,
+/** Ancho (pt) de cada columna de texto; los números se reparten el resto. */
+const ANCHOS_TEXTO: Record<CampoTextoMRP, number> = {
+  propietario: 70,
+  cuenta: 120,
+  detalleProducto: 92,
+  tipoAplicacion: 70,
+  unidadMedida: 28,
+  departamento: 54,
+  proyecto: 90,
+  grupoLinea: 66,
+  refineria: 52,
 };
 
-/**
- * Reparte el ancho útil de la página entre las columnas visibles.
- *
- * Los meses (y el "Total") se quedan con el espacio sobrante dividido en partes
- * iguales, lo que garantiza que la tabla llene exactamente la hoja apaisada y
- * que la suma de los anchos coincida con el ancho útil.
- */
-function calcularAnchos(
-  anchoDisponible: number,
-  columnas: ReadonlyArray<keyof typeof ETIQUETAS_CAMPO>,
-  cantidadMeses: number,
-) {
-  const anchosTexto = columnas.map((campo) => ANCHOS_TEXTO[ETIQUETAS_CAMPO[campo]] ?? 60);
-  const sumaTexto = anchosTexto.reduce((acc, ancho) => acc + ancho, 0);
-  // Los meses visibles más la columna "Total".
-  const anchoNumerico = Math.max((anchoDisponible - sumaTexto) / Math.max(cantidadMeses + 1, 1), 38);
-  return { anchosTexto, anchoNumerico };
-}
+/** Colores del semáforo (RGB) para el texto de la columna de cumplimiento. */
+const COLOR_ESTADO: Record<EstadoCumplimiento, [number, number, number]> = {
+  verde: [21, 128, 61],
+  amarillo: [161, 98, 7],
+  rojo: [185, 28, 28],
+  "sin-real": [100, 116, 139],
+  "sin-demanda": [100, 116, 139],
+};
 
 export interface OpcionesPdf {
   /** Registros de la vista actual (ya filtrados). */
   registros: RegistroMRP[];
+  /** Último mes del periodo (desde octubre). */
+  hasta: MesKey;
   /** Filtros activos, para dejarlos escritos en el encabezado. */
   filtrosAplicados?: string[];
   /** Término del buscador global, si hay uno activo. */
   busqueda?: string;
-  /**
-   * Columnas de datos que el usuario ocultó en la tabla.
-   *
-   * Se respetan en la tabla del PDF, pero **no** en el bloque de totales: los
-   * totales por mes y por UM se calculan siempre con todos los datos.
-   */
+  /** Columnas de texto que el usuario ocultó en la tabla. */
   columnasOcultas?: ColumnaTabla[];
   /** Nombre del archivo sin extensión. */
   nombreArchivo?: string;
@@ -92,20 +81,16 @@ function describirFiltros(filtros: string[], busqueda?: string): string {
 
 /** Fecha y hora de generación, en formato legible es-PE. */
 function fechaLegible(): string {
-  return new Intl.DateTimeFormat("es-PE", {
-    dateStyle: "long",
-    timeStyle: "short",
-  }).format(new Date());
+  return new Intl.DateTimeFormat("es-PE", { dateStyle: "long", timeStyle: "short" }).format(new Date());
 }
 
 /**
  * Construye el documento PDF completo y devuelve la instancia de jsPDF.
- *
- * Función exportada aparte de la descarga para poder verificarla en aislamiento
- * (no toca el DOM salvo por `doc.save`).
+ * Se exporta aparte de la descarga para poder verificarla en aislamiento.
  */
 export async function construirPdfMRP({
   registros,
+  hasta,
   filtrosAplicados = [],
   busqueda,
   columnasOcultas = [],
@@ -121,83 +106,92 @@ export async function construirPdfMRP({
   const anchoPagina = doc.internal.pageSize.getWidth();
   const margen = 24;
 
-  // Solo se imprimen las columnas visibles…
+  const meses = mesesHasta(hasta);
+  const etiquetaMes = (clave: MesKey) => MESES.find((mes) => mes.key === clave)?.label ?? clave;
   const columnasTexto = COLUMNAS_TEXTO.filter((campo) => !columnasOcultas.includes(campo));
-  const mesesVisibles = MESES.filter((mes) => !columnasOcultas.includes(mes.key));
-  // …pero los totales se calculan con TODOS los meses, siempre.
-  const mesesParaTotales: ReadonlyArray<{ key: MesKey; label: string }> = MESES;
-
-  const { anchosTexto, anchoNumerico } = calcularAnchos(
-    anchoPagina - margen * 2,
-    columnasTexto,
-    mesesVisibles.length,
-  );
+  const resumen = resumirPeriodo(registros, meses);
 
   /* ----------------------------- Encabezado ------------------------------ */
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.setTextColor(15, 23, 42);
-  doc.text(TITULO_REPORTE, anchoPagina / 2, margen + 14, { align: "center" });
+  doc.text(TITULO_REPORTE, margen, margen + 12);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Generado el ${fechaLegible()}`, anchoPagina / 2, margen + 28, { align: "center" });
-
+  doc.text(
+    `Pronóstico ${etiquetaPeriodo(hasta, ANIO_PRONOSTICO)} · Generado el ${fechaLegible()}`,
+    margen,
+    margen + 26,
+  );
   doc.setFontSize(8);
-  doc.text(describirFiltros(filtrosAplicados, busqueda), margen, margen + 42);
+  doc.text(describirFiltros(filtrosAplicados, busqueda), margen, margen + 40);
 
-  doc.setTextColor(15, 23, 42);
   doc.setFont("helvetica", "bold");
-  const resumenVista =
-    `${registros.length} registro${registros.length === 1 ? "" : "s"} en la vista` +
-    (columnasOcultas.length > 0
-      ? ` · ${columnasOcultas.length} columna${columnasOcultas.length === 1 ? "" : "s"} oculta${
-          columnasOcultas.length === 1 ? "" : "s"
-        } (incluidas en los totales)`
-      : "");
-  doc.text(resumenVista, margen, margen + 54);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    `${registros.length} registro${registros.length === 1 ? "" : "s"} · ` +
+      `Cumplimiento global ${formatearPorcentaje(resumen.ratio)} (${ETIQUETAS_ESTADO[resumen.estado]})`,
+    margen,
+    margen + 52,
+  );
 
   /* -------------------------------- Tabla -------------------------------- */
 
   const encabezados = [
     ...columnasTexto.map((campo) => ETIQUETAS_CAMPO[campo]),
-    ...mesesVisibles.map((mes) => mes.label),
-    "Total",
+    ...meses.flatMap((mes) => [`Pron. ${etiquetaMes(mes)}`, `Real ${etiquetaMes(mes)}`]),
+    "Total demanda",
+    "Real + avance",
+    "Cumpl.",
   ];
 
-  const cuerpo = registros.map((registro) => [
-    ...columnasTexto.map((campo) => registro[campo]),
-    ...mesesVisibles.map((mes) => {
-      const valor = registro.proyecciones[mes.key];
-      return valor === undefined ? "" : formatearNumero(valor);
-    }),
-    formatearNumero(totalFila(registro)),
-  ]);
+  const cuerpo = registros.map((registro) => {
+    const c = cumplimientoRegistro(registro, meses);
+    return [
+      ...columnasTexto.map((campo) => registro[campo]),
+      ...meses.flatMap((mes) => [
+        registro.proyecciones[mes] === undefined ? "" : formatearNumero(registro.proyecciones[mes]),
+        registro.reales[mes] === undefined ? "" : formatearNumero(registro.reales[mes]),
+      ]),
+      formatearNumero(c.demanda),
+      c.estado === "sin-real" ? "" : formatearNumero(c.real),
+      c.ratio === null ? ETIQUETAS_ESTADO[c.estado] : formatearPorcentaje(c.ratio),
+    ];
+  });
 
-  const totales = totalesPorMes(registros);
-  const totalGlobal = registros.reduce((acc, registro) => acc + totalFila(registro), 0);
+  const ancho = anchoPagina - margen * 2;
+  const sumaTexto = columnasTexto.reduce((acc, campo) => acc + ANCHOS_TEXTO[campo], 0);
+  const columnasNumericas = meses.length * 2 + 3;
+  const anchoNumerico = Math.max((ancho - sumaTexto) / columnasNumericas, 34);
 
-  /** Estilos por columna: los números van alineados a la derecha y más angostos. */
   const columnStyles: Record<string, { cellWidth: number; halign?: "right" }> = {};
   encabezados.forEach((_encabezado, indice) => {
     columnStyles[indice] =
       indice < columnasTexto.length
-        ? { cellWidth: anchosTexto[indice] }
+        ? { cellWidth: ANCHOS_TEXTO[columnasTexto[indice]] }
         : { cellWidth: anchoNumerico, halign: "right" };
   });
 
+  const indiceCumplimiento = encabezados.length - 1;
+
   autoTable(doc, {
-    startY: margen + 64,
+    startY: margen + 62,
     head: [encabezados],
     body: cuerpo,
     foot: [
       [
         "TOTAL",
         ...Array.from({ length: Math.max(columnasTexto.length - 1, 0) }, () => ""),
-        ...mesesVisibles.map((mes) => formatearNumero(totales[mes.key])),
-        formatearNumero(totalGlobal),
+        ...meses.flatMap((mes) => [
+          formatearNumero(resumen.porMes[mes].demanda),
+          resumen.porMes[mes].conReal ? formatearNumero(resumen.porMes[mes].real) : "",
+        ]),
+        formatearNumero(resumen.demanda),
+        formatearNumero(resumen.real),
+        formatearPorcentaje(resumen.ratio),
       ],
     ],
     theme: "grid",
@@ -206,84 +200,83 @@ export async function construirPdfMRP({
       fontSize: 6.5,
       cellPadding: 2.5,
       overflow: "linebreak",
-      lineColor: [203, 213, 225],
+      lineColor: [214, 220, 228],
       lineWidth: 0.4,
       textColor: [30, 41, 59],
     },
     headStyles: {
-      fillColor: [15, 23, 42],
+      fillColor: [14, 34, 53],
       textColor: [255, 255, 255],
-      fontSize: 6.8,
+      fontSize: 6.6,
       fontStyle: "bold",
       halign: "left",
     },
-    footStyles: {
-      fillColor: [30, 41, 59],
-      textColor: [255, 255, 255],
-      fontSize: 6.8,
-      fontStyle: "bold",
-    },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
+    footStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 6.8, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [247, 249, 251] },
     columnStyles,
     margin: { top: margen, right: margen, bottom: margen + 28, left: margen },
+    didParseCell: (datos) => {
+      if (datos.section !== "body" || datos.column.index !== indiceCumplimiento) return;
+      const estado = cumplimientoRegistro(registros[datos.row.index], meses).estado;
+      datos.cell.styles.textColor = COLOR_ESTADO[estado];
+      datos.cell.styles.fontStyle = "bold";
+    },
   });
 
   /** `finalY` lo publica el plugin; no está en los tipos de jsPDF. */
   const finalY =
-    (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ??
-    margen + 80;
+    (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? margen + 80;
 
   /* ---------------------- Bloque de totales (pie) ------------------------ */
 
-  const yBloque = finalY + 18;
-  const anchoBloque = (anchoPagina - margen * 2 - 16) / 2;
+  const yBloque = finalY + 22;
+  const anchoBloque = (ancho - 16) / 2;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
-  doc.text("Totales globales por mes", margen, yBloque - 4);
+  doc.text("Semáforo del periodo", margen, yBloque - 6);
 
-  // Este bloque muestra SIEMPRE los cinco meses, aunque estén ocultos en la
-  // tabla: es la garantía de que los totales no dependen de la visibilidad.
   autoTable(doc, {
     startY: yBloque,
-    head: [["Concepto", ...mesesParaTotales.map((mes) => mes.label), "Total"]],
-    body: [
-      [
-        "Consumo proyectado",
-        ...mesesParaTotales.map((mes) => formatearNumero(totales[mes.key])),
-        formatearNumero(totalGlobal),
-      ],
-    ],
+    head: [["Estado", "Regla", "Registros"]],
+    body: (["verde", "amarillo", "rojo", "sin-real"] as EstadoCumplimiento[]).map((estado) => [
+      ETIQUETAS_ESTADO[estado],
+      REGLA_ESTADO[estado],
+      String(resumen.porEstado[estado]),
+    ]),
     theme: "grid",
     tableWidth: anchoBloque,
-    styles: { fontSize: 7, cellPadding: 3, halign: "right", lineColor: [203, 213, 225], lineWidth: 0.4 },
+    styles: { fontSize: 7, cellPadding: 3, lineColor: [214, 220, 228], lineWidth: 0.4 },
     headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold" },
-    columnStyles: { 0: { halign: "left", cellWidth: 96 } },
+    columnStyles: { 2: { halign: "right" } },
     margin: { left: margen },
+    didParseCell: (datos) => {
+      if (datos.section !== "body" || datos.column.index !== 0) return;
+      const estados: EstadoCumplimiento[] = ["verde", "amarillo", "rojo", "sin-real"];
+      datos.cell.styles.textColor = COLOR_ESTADO[estados[datos.row.index]];
+      datos.cell.styles.fontStyle = "bold";
+    },
   });
 
-  const yUnidades = yBloque - 4;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
-  doc.text("Totales por Unidad de Medida", margen + anchoBloque + 16, yUnidades);
+  doc.text("Totales por unidad de medida", margen + anchoBloque + 16, yBloque - 6);
 
-  const porUnidad = resumenPorCampo(registros, "unidadMedida");
+  const porUnidad = totalesPorUnidad(registros, meses);
   autoTable(doc, {
     startY: yBloque,
-    head: [["Unidad de medida", "Registros", "Total"]],
-    body:
-      porUnidad.length > 0
-        ? porUnidad.map((fila) => [
-            fila.etiqueta,
-            String(fila.registros),
-            formatearNumero(fila.total),
-          ])
-        : [["Sin datos", "0", "0"]],
+    head: [["UM", "Registros", "Total demanda", "Real + avance"]],
+    body: porUnidad.map((fila) => [
+      fila.unidad,
+      String(fila.registros),
+      formatearNumero(fila.demanda),
+      formatearNumero(fila.real),
+    ]),
     theme: "grid",
     tableWidth: anchoBloque,
-    styles: { fontSize: 7, cellPadding: 3, halign: "right", lineColor: [203, 213, 225], lineWidth: 0.4 },
+    styles: { fontSize: 7, cellPadding: 3, halign: "right", lineColor: [214, 220, 228], lineWidth: 0.4 },
     headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold" },
     columnStyles: { 0: { halign: "left" } },
     margin: { left: margen + anchoBloque + 16 },
@@ -298,27 +291,19 @@ export async function construirPdfMRP({
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text("MRP · Proyección de Insumos Asfálticos", margen, alto - 12);
-    doc.text(
-      `Página ${pagina} de ${totalPaginas}`,
-      anchoPagina - margen,
-      alto - 12,
-      { align: "right" },
-    );
+    doc.text("MRP · Planificación de suministro de asfaltos", margen, alto - 12);
+    doc.text(`Página ${pagina} de ${totalPaginas}`, anchoPagina - margen, alto - 12, { align: "right" });
   }
 
   return doc;
 }
 
 /** Nombre del archivo PDF, con la fecha del día. */
-export function nombreArchivoPdf(base = "MRP_Proyeccion"): string {
+export function nombreArchivoPdf(base = "MRP_Seguimiento"): string {
   return `${base}_${new Date().toISOString().slice(0, 10)}.pdf`;
 }
 
-/**
- * Genera el PDF de la vista actual y dispara la descarga en el navegador.
- * Se ejecuta íntegramente en el cliente.
- */
+/** Genera el PDF de la vista actual y dispara la descarga en el navegador. */
 export async function exportarRegistrosPDF(opciones: OpcionesPdf): Promise<void> {
   const doc = await construirPdfMRP(opciones);
   doc.save(nombreArchivoPdf(opciones.nombreArchivo));

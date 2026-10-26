@@ -1,75 +1,123 @@
-import type { CampoTextoMRP, CatalogoMRP, ColumnaTabla, FiltrosMRP, MesKey } from "./types";
+import type {
+  CampoTextoMRP,
+  CatalogoMRP,
+  ColumnaTabla,
+  EstadoCumplimiento,
+  FiltrosMRP,
+  MesKey,
+} from "./types";
 
-/** Meses proyectados, en el orden en que se muestran en tabla y reportes. */
+/** Meses del horizonte de pronóstico, en el orden en que se muestran. */
 export const MESES: ReadonlyArray<{ key: MesKey; label: string; nombre: string }> = [
-  { key: "ago", label: "Ago", nombre: "Agosto" },
-  { key: "set", label: "Set", nombre: "Setiembre" },
   { key: "oct", label: "Oct", nombre: "Octubre" },
   { key: "nov", label: "Nov", nombre: "Noviembre" },
   { key: "dic", label: "Dic", nombre: "Diciembre" },
 ];
 
+/** Año del pronóstico (se muestra en rótulos). */
+export const ANIO_PRONOSTICO = 2026;
+
 /** Etiquetas legibles de cada campo de texto del registro. */
 export const ETIQUETAS_CAMPO: Record<CampoTextoMRP, string> = {
   propietario: "Propietario",
   departamento: "Departamento",
-  cuenta: "Cuenta",
+  cuenta: "Cliente",
   proyecto: "Proyecto",
-  detalleProducto: "Detalle Producto",
-  grupoLinea: "Grupo Línea",
+  detalleProducto: "Detalle producto",
+  grupoLinea: "Grupo línea",
   refineria: "Refinería",
   unidadMedida: "UM",
+  tipoAplicacion: "Tipo de aplicación",
 };
 
-/** Orden de las columnas de texto en la tabla principal. */
+/** Orden de los campos de texto en tablas, formularios y exportaciones. */
 export const CAMPOS_TEXTO: CampoTextoMRP[] = [
   "propietario",
-  "departamento",
   "cuenta",
-  "proyecto",
   "detalleProducto",
+  "tipoAplicacion",
+  "unidadMedida",
+  "departamento",
+  "proyecto",
+  "grupoLinea",
+  "refineria",
+];
+
+/** Filtros siempre visibles en la barra de filtros. */
+export const COLUMNAS_FILTRO: CampoTextoMRP[] = [
+  "propietario",
+  "cuenta",
+  "detalleProducto",
+  "tipoAplicacion",
+];
+
+/** Filtros adicionales, dentro de «Más filtros». */
+export const COLUMNAS_FILTRO_EXTRA: CampoTextoMRP[] = [
+  "departamento",
   "grupoLinea",
   "refineria",
   "unidadMedida",
 ];
 
-/** Columnas que exponen un filtro tipo `select` en la barra de filtros. */
-export const COLUMNAS_FILTRO: CampoTextoMRP[] = [
-  "propietario",
-  "departamento",
-  "grupoLinea",
-  "refineria",
-  "detalleProducto",
-];
-
 /** Catálogos usados como sugerencia en los formularios (el usuario puede escribir otro). */
-export const UNIDADES_MEDIDA = ["GLN", "KG", "UND", "LT", "TM", "BLS"];
+export const UNIDADES_MEDIDA = ["GLN", "KG", "TM", "UND"];
 export const GRUPOS_LINEA = [
   "ASFALTO CONVENCIONAL",
   "ASFALTOS MODIFICADOS",
-  "EMULSIONES ASFÁLTICAS",
-  "MEZCLAS ASFÁLTICAS",
-  "ADITIVOS Y PIGMENTOS",
+  "EMULSION ASFALTICA",
+  "ASFALTO CORTADO",
+  "OTROS PRODUCTOS ASFALTICOS",
 ];
-export const REFINERIAS = ["PETROPERU", "IMPORTADO", "REPSOL", "LOCAL"];
+export const REFINERIAS = ["IMPORTADO", "PETROPERU", "REPSOL"];
 export const DEPARTAMENTOS = [
+  "AMAZONAS",
+  "ANCASH",
   "APURIMAC",
   "AREQUIPA",
+  "AYACUCHO",
+  "CAJAMARCA",
   "CUSCO",
+  "HUANCAVELICA",
+  "HUANUCO",
+  "ICA",
   "JUNIN",
   "LA LIBERTAD",
+  "LAMBAYEQUE",
   "LIMA",
+  "LORETO",
+  "MADRE DE DIOS",
+  "MOQUEGUA",
+  "PASCO",
   "PIURA",
+  "PUNO",
+  "SAN MARTIN",
+  "TACNA",
+  "TUMBES",
+  "UCAYALI",
+];
+/** Sugerencias de tipo de aplicación (el campo es libre: se puede escribir otro). */
+export const TIPOS_APLICACION = [
+  "Carpeta asfáltica en caliente",
+  "Riego de liga",
+  "Imprimación",
+  "Tratamiento superficial",
+  "Slurry seal / microsurfacing",
+  "Sellado de fisuras",
+  "Bacheo",
 ];
 
 /**
- * Columnas de datos que el usuario puede ocultar: todos los campos de texto y
- * los meses. Ocultar una columna sólo cambia la vista, **nunca** los totales
- * (el total por fila y el total general siguen sumando todos los meses).
+ * Columnas de datos que el usuario puede ocultar. Ocultar es solo visual: los
+ * totales y el cumplimiento se calculan siempre sobre todos los datos.
  */
-export const COLUMNAS_OCULTABLES: ColumnaTabla[] = [
-  ...CAMPOS_TEXTO,
-  ...MESES.map((mes) => mes.key),
+export const COLUMNAS_OCULTABLES: ColumnaTabla[] = [...CAMPOS_TEXTO];
+
+/** Columnas que arrancan ocultas la primera vez (la vista se centra en lo comercial). */
+export const COLUMNAS_OCULTAS_INICIALES: ColumnaTabla[] = [
+  "departamento",
+  "proyecto",
+  "grupoLinea",
+  "refineria",
 ];
 
 /** Columnas de cada grupo del selector de visibilidad. */
@@ -77,16 +125,19 @@ export const GRUPOS_COLUMNAS: ReadonlyArray<{
   titulo: string;
   columnas: ColumnaTabla[];
 }> = [
-  { titulo: "Datos generales", columnas: CAMPOS_TEXTO },
-  { titulo: "Meses", columnas: MESES.map((mes) => mes.key) },
+  {
+    titulo: "Seguimiento comercial",
+    columnas: ["propietario", "cuenta", "detalleProducto", "tipoAplicacion", "unidadMedida"],
+  },
+  {
+    titulo: "Datos de la obra y del producto",
+    columnas: ["departamento", "proyecto", "grupoLinea", "refineria"],
+  },
 ];
 
 /**
- * Valores con los que arranca el catálogo global.
- *
- * Los campos "cerrados" (departamento, grupo línea, refinería y UM) parten de su
- * lista conocida; el resto empieza vacío y se van poblando con lo que el usuario
- * escriba o importe.
+ * Valores con los que arranca el catálogo global: los campos «cerrados» parten de su
+ * lista conocida; el resto se va poblando con lo que el usuario escriba o importe.
  */
 export const CATALOGO_SEMILLA: CatalogoMRP = {
   propietario: [],
@@ -97,6 +148,7 @@ export const CATALOGO_SEMILLA: CatalogoMRP = {
   grupoLinea: [...GRUPOS_LINEA],
   refineria: [...REFINERIAS],
   unidadMedida: [...UNIDADES_MEDIDA],
+  tipoAplicacion: [...TIPOS_APLICACION],
 };
 
 /** Estado inicial de los filtros (todos vacíos = sin filtro). */
@@ -109,19 +161,39 @@ export const FILTROS_INICIALES: FiltrosMRP = {
   grupoLinea: "",
   refineria: "",
   unidadMedida: "",
+  tipoAplicacion: "",
 };
 
-/** Clave de `localStorage` donde se persisten los registros. */
-export const STORAGE_KEY = "mrp:registros:v1";
+/* -------------------------------------------------------------------------- */
+/*  Semáforo de cumplimiento                                                   */
+/* -------------------------------------------------------------------------- */
 
-/** Clave de `localStorage` donde se persiste el catálogo global de valores. */
-export const CATALOGO_STORAGE_KEY = "mrp:catalogo:v1";
+/** Umbrales del semáforo, sobre (real + avance) ÷ demanda. */
+export const UMBRAL_VERDE = 0.9;
+export const UMBRAL_AMARILLO = 0.7;
 
-/** Clave de `localStorage` donde se persiste el tema claro/oscuro. */
+export const ETIQUETAS_ESTADO: Record<EstadoCumplimiento, string> = {
+  verde: "Cumple",
+  amarillo: "En riesgo",
+  rojo: "Crítico",
+  "sin-real": "Sin real",
+  "sin-demanda": "Sin pronóstico",
+};
+
+/** Texto del umbral de cada estado, para leyendas. */
+export const REGLA_ESTADO: Record<EstadoCumplimiento, string> = {
+  verde: `≥ ${UMBRAL_VERDE * 100}%`,
+  amarillo: `${UMBRAL_AMARILLO * 100}% – ${UMBRAL_VERDE * 100 - 1}%`,
+  rojo: `< ${UMBRAL_AMARILLO * 100}%`,
+  "sin-real": "aún sin despacho cargado",
+  "sin-demanda": "sin pronóstico en el periodo",
+};
+
+/** Versión del almacenamiento: v2 incorpora Tipo de aplicación, despacho real y los datos del Excel. */
+export const STORAGE_KEY = "mrp:registros:v2";
+export const CATALOGO_STORAGE_KEY = "mrp:catalogo:v2";
 export const TEMA_STORAGE_KEY = "mrp:tema";
-
-/** Clave de `localStorage` donde se persisten las columnas ocultas. */
-export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v1";
+export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v2";
 
 /** Leyenda mostrada en el pie de la tabla y en las exportaciones. */
 export const ETIQUETA_TOTAL = "TOTAL";

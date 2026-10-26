@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertTriangle, CalendarRange, ListTree, Save, Tag } from "lucide-react";
+import { AlertTriangle, CalendarRange, Package, Save, UserRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { CAMPOS_TEXTO, ETIQUETAS_CAMPO, MESES } from "@/lib/constants";
-import type { CampoTextoMRP, MesKey, RegistroMRP } from "@/lib/types";
+import { formatearNumero } from "@/lib/mrp-utils";
+import type { CampoTextoMRP, CantidadesMes, MesKey, RegistroMRP } from "@/lib/types";
 import { parsearNumero } from "@/lib/utils";
 
 import { Boton } from "./ui/Boton";
@@ -12,7 +13,7 @@ import { Campo, Input } from "./ui/Campos";
 import { Modal } from "./ui/Modal";
 import { SelectorConNuevo } from "./ui/SelectorConNuevo";
 
-type ClaveBorrador = CampoTextoMRP | `mes_${MesKey}`;
+type ClaveBorrador = CampoTextoMRP | `pron_${MesKey}` | `real_${MesKey}`;
 
 type Borrador = Record<ClaveBorrador, string>;
 
@@ -31,27 +32,34 @@ interface PropsFormulario {
 }
 
 /** Campos que se agrupan en cada sección del formulario. */
-const SECCION_METADATOS: CampoTextoMRP[] = ["propietario", "departamento", "cuenta", "proyecto"];
-const SECCION_CLASIFICACION: CampoTextoMRP[] = [
+const SECCION_RESPONSABLE: CampoTextoMRP[] = ["propietario", "cuenta", "departamento", "proyecto"];
+const SECCION_PRODUCTO: CampoTextoMRP[] = [
   "detalleProducto",
+  "tipoAplicacion",
+  "unidadMedida",
   "grupoLinea",
   "refineria",
-  "unidadMedida",
 ];
 
 /** Campos obligatorios y su mensaje de error. */
 const OBLIGATORIOS: Partial<Record<CampoTextoMRP, string>> = {
+  cuenta: "Indica el cliente.",
   detalleProducto: "El detalle del producto es obligatorio.",
-  unidadMedida: "Indica la unidad de medida (GLN, KG, TM…).",
+  unidadMedida: "Indica la unidad de medida (GLN, KG…).",
 };
+
+/** Convierte las cantidades de un mes en texto editable. */
+function texto(valor: number | undefined): string {
+  return valor === undefined ? "" : String(valor);
+}
 
 /** Borrador vacío (o precargado) del formulario. */
 function borradorInicial(registro?: RegistroMRP | null): Borrador {
   const base = {} as Borrador;
   for (const campo of CAMPOS_TEXTO) base[campo] = registro?.[campo] ?? "";
   for (const mes of MESES) {
-    const valor = registro?.proyecciones[mes.key];
-    base[`mes_${mes.key}`] = valor === undefined ? "" : String(valor);
+    base[`pron_${mes.key}`] = texto(registro?.proyecciones[mes.key]);
+    base[`real_${mes.key}`] = texto(registro?.reales[mes.key]);
   }
   return base;
 }
@@ -69,16 +77,12 @@ function Seccion({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+    <section className="rounded-md border border-line bg-surface-2/60 p-3.5">
       <header className="mb-3 flex items-start gap-2">
-        <span className="mt-0.5 text-slate-400 dark:text-slate-500">{icono}</span>
+        <span className="mt-0.5 text-accent">{icono}</span>
         <div>
-          <h3 className="text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-300">
-            {titulo}
-          </h3>
-          {descripcion ? (
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">{descripcion}</p>
-          ) : null}
+          <h3 className="rotulo text-ink">{titulo}</h3>
+          {descripcion ? <p className="text-xs text-ink-3">{descripcion}</p> : null}
         </div>
       </header>
       {children}
@@ -89,10 +93,9 @@ function Seccion({
 /**
  * Modal de alta y edición de un registro.
  *
- * Estructura: metadatos → clasificación → cantidades mensuales. Cada campo de
- * texto es un selector que acepta valores del catálogo **o** un valor nuevo
- * escrito a mano; al guardar, el padre registra esos valores en el catálogo
- * global para que aparezcan en los filtros y en el siguiente registro.
+ * Estructura: responsable y cliente → producto → cantidades mensuales (pronóstico
+ * y real). Cada campo de texto es un selector que acepta valores del catálogo **o**
+ * uno nuevo escrito a mano; al guardar, el padre lo registra en el catálogo global.
  */
 export function RegistroFormModal({
   abierto,
@@ -128,14 +131,22 @@ export function RegistroFormModal({
     }
 
     for (const mes of MESES) {
-      const clave: ClaveBorrador = `mes_${mes.key}`;
-      const texto = borrador[clave].trim();
-      if (texto !== "" && parsearNumero(texto) === undefined) {
-        encontrados[clave] = "Valor no numérico";
+      for (const clave of [`pron_${mes.key}`, `real_${mes.key}`] as const) {
+        const valor = borrador[clave].trim();
+        if (valor !== "" && parsearNumero(valor) === undefined) encontrados[clave] = "Valor no numérico";
       }
     }
 
     return encontrados;
+  };
+
+  const leerMeses = (prefijo: "pron" | "real"): CantidadesMes => {
+    const cantidades: CantidadesMes = {};
+    for (const mes of MESES) {
+      const valor = parsearNumero(borrador[`${prefijo}_${mes.key}`]);
+      if (valor !== undefined) cantidades[mes.key] = valor;
+    }
+    return cantidades;
   };
 
   const guardar = () => {
@@ -144,12 +155,6 @@ export function RegistroFormModal({
     if (Object.keys(encontrados).length > 0) {
       setErrores(encontrados);
       return;
-    }
-
-    const proyecciones: RegistroMRP["proyecciones"] = {};
-    for (const mes of MESES) {
-      const valor = parsearNumero(borrador[`mes_${mes.key}`]);
-      if (valor !== undefined) proyecciones[mes.key] = valor;
     }
 
     onGuardar({
@@ -161,7 +166,9 @@ export function RegistroFormModal({
       grupoLinea: borrador.grupoLinea.trim(),
       refineria: borrador.refineria.trim(),
       unidadMedida: borrador.unidadMedida.trim(),
-      proyecciones,
+      tipoAplicacion: borrador.tipoAplicacion.trim(),
+      proyecciones: leerMeses("pron"),
+      reales: leerMeses("real"),
     });
 
     onCerrar();
@@ -169,10 +176,8 @@ export function RegistroFormModal({
 
   const esEdicion = Boolean(registro);
   const cantidadErrores = Object.keys(errores).length;
-  const resumenMensual = MESES.reduce(
-    (acc, mes) => acc + (parsearNumero(borrador[`mes_${mes.key}`]) ?? 0),
-    0,
-  );
+  const suma = (prefijo: "pron" | "real") =>
+    MESES.reduce((acc, mes) => acc + (parsearNumero(borrador[`${prefijo}_${mes.key}`]) ?? 0), 0);
 
   /** Render de un campo de texto con selector + valor nuevo. */
   const campoTexto = (campo: CampoTextoMRP) => (
@@ -194,93 +199,92 @@ export function RegistroFormModal({
     </Campo>
   );
 
+  /** Fila de cantidades (pronóstico o real) con una caja por mes. */
+  const filaMeses = (prefijo: "pron" | "real", titulo: string, ayuda: string) => (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <p className="rotulo text-ink">{titulo}</p>
+        <p className="text-xs text-ink-3">{ayuda}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {MESES.map((mes) => {
+          const clave = `${prefijo}_${mes.key}` as const;
+          return (
+            <Campo key={clave} etiqueta={mes.nombre} htmlFor={clave} error={errores[clave]}>
+              <Input
+                id={clave}
+                inputMode="decimal"
+                value={borrador[clave]}
+                onChange={(evento) => actualizar(clave, evento.target.value)}
+                placeholder="0"
+                aria-invalid={Boolean(errores[clave])}
+                className="num text-right"
+              />
+            </Campo>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
       titulo={esEdicion ? "Editar registro" : "Nuevo registro"}
-      descripcion="Completa la ficha del insumo y su proyección mensual. Deja un mes vacío si no hay requerimiento."
+      descripcion="Vendedor, cliente y producto, con el pronóstico mensual y lo despachado."
       tamano="lg"
       pie={
         <>
-          <span className="mr-auto text-[11px] text-slate-400 dark:text-slate-500">
-            {esEdicion ? "Guardando se actualiza la fila existente." : "Se anexa al final de la tabla."}
+          <span className="mr-auto hidden text-xs text-ink-3 sm:inline">
+            {esEdicion ? "Guardar actualiza la fila existente." : "Se anexa al final de la tabla."}
           </span>
           <Boton variante="fantasma" onClick={onCerrar}>
             Cancelar
           </Boton>
-          <Boton
-            variante={esEdicion ? "primario" : "exito"}
-            onClick={guardar}
-            icono={<Save className="size-4" />}
-          >
-            {esEdicion ? "Guardar cambios" : "Guardar y Anexar"}
+          <Boton variante="primario" onClick={guardar} icono={<Save className="size-4" />}>
+            {esEdicion ? "Guardar cambios" : "Guardar y anexar"}
           </Boton>
         </>
       }
     >
       <div className="flex flex-col gap-4">
         {intentoGuardar && cantidadErrores > 0 ? (
-          <p className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          <p className="flex items-start gap-2 rounded-md border border-bad-line bg-bad-soft px-3 py-2 text-sm text-bad">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>
-              Hay {cantidadErrores} campo{cantidadErrores === 1 ? "" : "s"} por corregir antes de
-              guardar.
+              Hay {cantidadErrores} campo{cantidadErrores === 1 ? "" : "s"} por corregir antes de guardar.
             </span>
           </p>
         ) : null}
 
         <Seccion
-          titulo="Metadatos del registro"
-          descripcion="Quién solicita el insumo y a qué obra o cuenta corresponde."
-          icono={<Tag className="size-3.5" />}
+          titulo="Responsable y cliente"
+          descripcion="Quién vende y a quién se le abastece."
+          icono={<UserRound className="size-4" />}
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {SECCION_METADATOS.map(campoTexto)}
-          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{SECCION_RESPONSABLE.map(campoTexto)}</div>
         </Seccion>
 
         <Seccion
-          titulo="Clasificación del producto"
-          descripcion="Detalle, grupo línea, refinería y unidad de medida."
-          icono={<ListTree className="size-3.5" />}
+          titulo="Producto"
+          descripcion="Qué se vende, para qué aplicación y en qué unidad."
+          icono={<Package className="size-4" />}
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {SECCION_CLASIFICACION.map(campoTexto)}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {SECCION_PRODUCTO.map(campoTexto)}
           </div>
         </Seccion>
 
         <Seccion
           titulo="Cantidades mensuales"
-          descripcion="Proyección de consumo por mes. Total del borrador:"
-          icono={<CalendarRange className="size-3.5" />}
+          descripcion="En la unidad de medida elegida. Deja vacío lo que aún no tenga dato."
+          icono={<CalendarRange className="size-4" />}
         >
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {MESES.map((mes) => (
-              <Campo
-                key={mes.key}
-                etiqueta={mes.nombre}
-                htmlFor={`mes-${mes.key}`}
-                error={errores[`mes_${mes.key}`]}
-              >
-                <Input
-                  id={`mes-${mes.key}`}
-                  inputMode="decimal"
-                  value={borrador[`mes_${mes.key}`]}
-                  onChange={(evento) => actualizar(`mes_${mes.key}`, evento.target.value)}
-                  placeholder="0"
-                  aria-invalid={Boolean(errores[`mes_${mes.key}`])}
-                  className="text-right tabular-nums"
-                />
-              </Campo>
-            ))}
+          <div className="flex flex-col gap-4">
+            {filaMeses("pron", "Pronóstico de demanda", `Suma: ${formatearNumero(suma("pron"))}`)}
+            {filaMeses("real", "Real + avance", `Suma: ${formatearNumero(suma("real"))}`)}
           </div>
-          <p className="mt-3 text-right text-xs text-slate-500 dark:text-slate-400">
-            Suma del borrador:{" "}
-            <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-              {resumenMensual.toLocaleString("es-PE", { maximumFractionDigits: 2 })}
-            </span>
-          </p>
         </Seccion>
       </div>
     </Modal>

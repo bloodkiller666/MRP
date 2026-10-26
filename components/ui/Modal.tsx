@@ -18,15 +18,15 @@ interface ModalProps {
 }
 
 const TAMANOS: Record<NonNullable<ModalProps["tamano"]>, string> = {
-  sm: "max-w-md",
-  md: "max-w-2xl",
-  lg: "max-w-4xl",
-  xl: "max-w-6xl",
+  sm: "sm:max-w-md",
+  md: "sm:max-w-2xl",
+  lg: "sm:max-w-4xl",
+  xl: "sm:max-w-6xl",
 };
 
 /**
- * Modal base: backdrop oscuro, cierre con Escape o clic fuera,
- * bloqueo del scroll de fondo y cabecera fija con acciones al pie.
+ * Modal base: en móvil ocupa toda la pantalla; en escritorio es un panel
+ * centrado. Cierra con Escape o clic fuera y bloquea el scroll de fondo.
  */
 export function Modal({
   abierto,
@@ -58,7 +58,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm sm:p-8 dark:bg-black/70"
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-chrome/70 backdrop-blur-[2px] sm:items-center sm:p-6"
       role="presentation"
       onMouseDown={(evento) => {
         if (evento.target === evento.currentTarget) onCerrar();
@@ -69,32 +69,29 @@ export function Modal({
         aria-modal="true"
         aria-label={titulo}
         className={cn(
-          "my-auto w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
-          "dark:border-slate-800 dark:bg-slate-900",
+          "flex max-h-full w-full flex-col overflow-hidden border-line bg-surface shadow-2xl sm:rounded-md sm:border",
           TAMANOS[tamano],
         )}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/60">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-white">{titulo}</h2>
-            {descripcion ? (
-              <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{descripcion}</p>
-            ) : null}
+        <header className="flex items-start justify-between gap-4 border-b border-line bg-surface-2 px-5 py-3.5">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-ink">{titulo}</h2>
+            {descripcion ? <p className="mt-0.5 text-sm text-ink-2">{descripcion}</p> : null}
           </div>
           <button
             type="button"
             onClick={onCerrar}
             aria-label="Cerrar"
-            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="-mr-1.5 rounded p-1.5 text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink"
           >
             <X className="size-4" />
           </button>
         </header>
 
-        <div className="max-h-[65vh] overflow-y-auto px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
 
         {pie ? (
-          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-2 px-5 py-3">
             {pie}
           </footer>
         ) : null}

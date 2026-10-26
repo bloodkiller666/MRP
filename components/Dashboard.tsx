@@ -1,304 +1,548 @@
 "use client";
 
-import { BarChart3, Inbox, PieChart as IconoPastel, TrendingUp } from "lucide-react";
-import type { ReactNode } from "react";
+import { Inbox } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  ComposedChart,
-  Legend,
-  Line,
-  Pie,
-  PieChart,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 
-import { useTema } from "@/hooks/use-tema";
-import { MESES } from "@/lib/constants";
-import { formatearNumero, resumenPorCampo, totalesPorMes } from "@/lib/mrp-utils";
-import type { RegistroMRP } from "@/lib/types";
+import { ANIO_PRONOSTICO, ETIQUETAS_ESTADO, MESES, UMBRAL_AMARILLO, UMBRAL_VERDE } from "@/lib/constants";
+import {
+  etiquetaPeriodo,
+  formatearCompacto,
+  formatearNumero,
+  formatearPorcentaje,
+  mesesHasta,
+  resumenPorCampo,
+  resumirPeriodo,
+  totalDemanda,
+  totalesPorUnidad,
+} from "@/lib/mrp-utils";
+import type { EstadoCumplimiento, MesKey, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+import { ESTILOS_ESTADO, EstadoPastilla } from "./Semaforo";
 
 interface DashboardProps {
   /** Registros ya filtrados: los gráficos reflejan siempre la vista actual. */
   registros: RegistroMRP[];
+  hasta: MesKey;
 }
 
-/**
- * Props que recharts inyecta al contenido personalizado de `Tooltip`.
- *
- * Se declaran como opcionales (y con un `payload` relajado) porque recharts
- * clona el elemento con sus props internas; así el componente no depende de
- * los tipos exactos de la librería.
- */
-interface PropsTooltipGrafico {
-  active?: boolean;
-  label?: string | number;
-  payload?: Array<{
-    name?: string | number;
-    value?: string | number;
-    color?: string;
-    payload?: { fill?: string; porcentaje?: number; registros?: number };
-  }>;
+const COLOR_MES: Record<MesKey, string> = {
+  oct: "var(--viz-m1)",
+  nov: "var(--viz-m2)",
+  dic: "var(--viz-m3)",
+};
+
+const EJE = { fill: "var(--ink-2)", fontSize: 12 };
+
+/** «Moises Alejandro Salas Espinoza» → «Moises Salas» (nombre + primer apellido). */
+function nombreCorto(nombre: string): string {
+  const partes = nombre.split(/\s+/).filter(Boolean);
+  if (partes.length <= 2) return nombre;
+  if (partes.length === 3) return `${partes[0]} ${partes[1]}`;
+  return `${partes[0]} ${partes[2]}`;
 }
 
-const clasesTitulo =
-  "text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400";
-
-/** Tooltip compartido por los tres gráficos, con clases Tailwind (modo oscuro incluido). */
-function TooltipGrafico({ active, label, payload }: PropsTooltipGrafico) {
-  if (!active || !payload || payload.length === 0) return null;
-
-  const titulo =
-    label !== undefined && label !== "" ? String(label) : String(payload[0]?.name ?? "");
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-lg dark:border-slate-700 dark:bg-slate-900/95">
-      <p className={cn(clasesTitulo, "text-[10px]")}>{titulo}</p>
-      {payload.map((item, indice) => (
-        <p
-          key={indice}
-          className="mt-1 flex items-center gap-2 text-sm tabular-nums text-slate-800 dark:text-slate-100"
-        >
-          <span
-            className="size-2 shrink-0 rounded-full"
-            style={{ backgroundColor: item.color ?? item.payload?.fill ?? "#64748b" }}
-          />
-          <span className="font-semibold">{formatearNumero(Number(item.value))}</span>
-          {typeof item.payload?.porcentaje === "number" ? (
-            <span className="text-xs text-slate-400 dark:text-slate-500">
-              {item.payload.porcentaje.toFixed(1)}% · {item.payload.registros} reg.
-            </span>
-          ) : null}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-/** Color de cada refinería (mismo código de color que el Reporte rápido). */
-function colorRefineria(etiqueta: string): string {
-  const valor = etiqueta.toUpperCase();
-  if (valor.includes("PETROPERU")) return "#10b981"; // emerald
-  if (valor.includes("IMPORTADO")) return "#0ea5e9"; // sky
-  if (valor.includes("LOCAL")) return "#f59e0b"; // amber
-  if (valor.includes("REPSOL")) return "#8b5cf6"; // violet
-  return "#64748b"; // slate
-}
-
-/** Paleta para las categorías de Grupo de Línea. */
-const PALETA_GRUPO = ["#0ea5e9", "#10b981", "#f59e0b", "#8b5cf6", "#f43f5e", "#64748b"];
-
-/** Tarjeta contenedora de un gráfico, con título y descripción. */
-function TarjetaGrafico({
+/** Tarjeta contenedora de un panel, con título y descripción. */
+function Panel({
   titulo,
   descripcion,
-  icono,
+  acciones,
   className,
-  altura = "h-80",
   children,
 }: {
   titulo: string;
-  descripcion: string;
-  icono: ReactNode;
-  /** Clases extra de la tarjeta (ej. `xl:col-span-2`). */
+  descripcion?: string;
+  acciones?: ReactNode;
   className?: string;
-  /** Alto del lienzo del gráfico. */
-  altura?: string;
   children: ReactNode;
 }) {
   return (
-    <section
-      className={cn(
-        "flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900",
-        className,
-      )}
-    >
-      <header>
-        <h3 className={cn("flex items-center gap-1.5", clasesTitulo)}>
-          {icono}
-          {titulo}
-        </h3>
-        <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{descripcion}</p>
+    <section className={cn("flex flex-col rounded-md border border-line bg-surface p-4", className)}>
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink">{titulo}</h3>
+          {descripcion ? <p className="mt-0.5 text-xs text-ink-3">{descripcion}</p> : null}
+        </div>
+        {acciones}
       </header>
-      <div className={cn("mt-3 w-full", altura)}>{children}</div>
+      <div className="mt-4 flex-1">{children}</div>
     </section>
   );
 }
 
+/** Props que recharts inyecta al tooltip personalizado. */
+interface PropsTooltip {
+  active?: boolean;
+  label?: string | number;
+  payload?: Array<{ dataKey?: string | number; name?: string | number; value?: number | string; color?: string; payload?: FilaVendedor }>;
+}
+
+interface FilaVendedor {
+  vendedor: string;
+  corto: string;
+  oct: number;
+  nov: number;
+  dic: number;
+  total: number;
+}
+
+/** Tooltip del gráfico apilado: vendedor, cada mes y el total. */
+function TooltipVendedor({ active, payload, unidad }: PropsTooltip & { unidad: string }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const fila = payload[0]?.payload;
+  if (!fila) return null;
+
+  return (
+    <div className="rounded-md border border-line-strong bg-surface px-3 py-2 shadow-lg">
+      <p className="text-xs font-semibold text-ink">{fila.vendedor}</p>
+      <ul className="mt-1.5 flex flex-col gap-1">
+        {payload.map((item) => (
+          <li key={String(item.dataKey)} className="flex items-center gap-2 text-xs text-ink-2">
+            <span className="size-2 rounded-[2px]" style={{ background: item.color }} />
+            <span>{item.name}</span>
+            <span className="num ml-auto pl-4 font-semibold text-ink">{formatearNumero(Number(item.value))}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1.5 flex justify-between border-t border-line pt-1.5 text-xs text-ink-2">
+        <span>Total</span>
+        <span className="num font-semibold text-ink">
+          {formatearNumero(fila.total)} {unidad}
+        </span>
+      </p>
+    </div>
+  );
+}
+
+/** Tooltip simple de una sola serie (productos). */
+function TooltipSimple({
+  active,
+  payload,
+  unidad,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number | string; payload?: { etiqueta: string; registros: number } }>;
+  unidad: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const fila = payload[0].payload;
+  return (
+    <div className="rounded-md border border-line-strong bg-surface px-3 py-2 shadow-lg">
+      <p className="text-xs font-semibold text-ink">{fila?.etiqueta}</p>
+      <p className="num mt-1 text-xs text-ink-2">
+        <span className="font-semibold text-ink">{formatearNumero(Number(payload[0].value))}</span> {unidad} ·{" "}
+        {fila?.registros} reg.
+      </p>
+    </div>
+  );
+}
+
 /**
- * Vista analítica: tres gráficos calculados en memoria sobre los registros
- * filtrados (respetan filtros, búsqueda y modo oscuro).
+ * Vista analítica del periodo, calculada en memoria sobre los registros filtrados.
  *
- * 1. Tendencia de demanda mensual (barras + línea, Ago → Dic).
- * 2. Distribución del volumen por refinería (donut).
- * 3. Demanda por grupo de línea (barras horizontales, mayor volumen arriba).
+ * Se muestra **una unidad de medida a la vez** (GLN o KG): sumar galones con
+ * kilos no tiene sentido, así que cada gráfico trabaja con una sola unidad.
  */
-export function Dashboard({ registros }: DashboardProps) {
-  const { esOscuro } = useTema();
+export function Dashboard({ registros, hasta }: DashboardProps) {
+  const meses = useMemo(() => mesesHasta(hasta), [hasta]);
+  const mesesPeriodo = MESES.filter((mes) => meses.includes(mes.key));
 
-  // Colores que Tailwind no puede aplicar dentro del SVG de recharts.
-  const colorTexto = esOscuro ? "#94a3b8" : "#475569";
-  const colorGrid = esOscuro ? "#334155" : "#e2e8f0";
-  const colorFondo = esOscuro ? "#0f172a" : "#ffffff";
-  const colorLinea = esOscuro ? "#e2e8f0" : "#1e293b";
-  const colorCursor = "rgba(148, 163, 184, 0.15)";
-  const colorBarra = "#f59e0b"; // ámbar, coherente con el tema de asfaltos.
+  const unidades = useMemo(() => totalesPorUnidad(registros, meses), [registros, meses]);
+  const [unidadElegida, setUnidadElegida] = useState("");
+  const unidad = unidades.some((u) => u.unidad === unidadElegida) ? unidadElegida : (unidades[0]?.unidad ?? "");
 
-  const totales = totalesPorMes(registros);
-  const porRefineria = resumenPorCampo(registros, "refineria");
-  const porGrupo = resumenPorCampo(registros, "grupoLinea");
+  const enUnidad = useMemo(
+    () => registros.filter((r) => (r.unidadMedida.trim() || "s/UM") === unidad),
+    [registros, unidad],
+  );
 
-  const datosMensual = MESES.map((mes) => ({
-    mes: mes.label,
-    total: totales[mes.key],
-  }));
+  const resumen = useMemo(() => resumirPeriodo(enUnidad, meses), [enUnidad, meses]);
 
-  // En un BarChart vertical la primera fila queda abajo: se invierte el orden
-  // para que el grupo con mayor volumen aparezca en la parte superior.
-  const datosGrupo = [...porGrupo].reverse();
+  const filasVendedor = useMemo<FilaVendedor[]>(() => {
+    const mapa = new Map<string, FilaVendedor>();
+    for (const registro of enUnidad) {
+      const vendedor = registro.propietario.trim() || "(sin propietario)";
+      const fila = mapa.get(vendedor) ?? {
+        vendedor,
+        corto: nombreCorto(vendedor),
+        oct: 0,
+        nov: 0,
+        dic: 0,
+        total: 0,
+      };
+      for (const mes of meses) fila[mes] += registro.proyecciones[mes] ?? 0;
+      fila.total = meses.reduce((acc, mes) => acc + fila[mes], 0);
+      mapa.set(vendedor, fila);
+    }
+    return [...mapa.values()].filter((f) => f.total > 0).sort((a, b) => b.total - a.total);
+  }, [enUnidad, meses]);
+
+  const cumplimientoVendedor = useMemo(
+    () => resumenPorCampo(enUnidad, "propietario", meses).filter((f) => f.demanda > 0),
+    [enUnidad, meses],
+  );
+
+  const topClientes = useMemo(
+    () =>
+      resumenPorCampo(enUnidad, "cuenta", meses)
+        .filter((f) => f.demanda > 0)
+        .slice(0, 10),
+    [enUnidad, meses],
+  );
+
+  const topProductos = useMemo(
+    () =>
+      resumenPorCampo(enUnidad, "detalleProducto", meses)
+        .filter((f) => f.demanda > 0)
+        .slice(0, 8)
+        .map((f) => ({ etiqueta: f.etiqueta, demanda: f.demanda, registros: f.registros })),
+    [enUnidad, meses],
+  );
 
   if (registros.length === 0) {
     return (
-      <section className="rounded-xl border border-slate-200 bg-white px-4 py-16 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <Inbox className="mx-auto mb-3 size-8 text-slate-300 dark:text-slate-600" />
-        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-          No hay datos para graficar
-        </p>
-        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+      <section className="rounded-md border border-line bg-surface px-4 py-16 text-center">
+        <Inbox className="mx-auto mb-3 size-8 text-line-strong" />
+        <p className="text-sm font-medium text-ink">No hay datos para graficar</p>
+        <p className="mt-1 text-xs text-ink-3">
           Ajusta los filtros, importa un Excel o agrega un registro manualmente.
         </p>
       </section>
     );
   }
 
+  const totalSemaforo = Object.values(resumen.porEstado).reduce((a, b) => a + b, 0);
+  const maxCliente = Math.max(...topClientes.map((f) => f.demanda), 1);
+  const ultimoMes = meses[meses.length - 1];
+  const hayReal = resumen.ratio !== null;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <TarjetaGrafico
-          titulo="Tendencia de Demanda Mensual"
-          descripcion="Cantidad total requerida por mes (Ago–Dic) para identificar picos."
-          icono={<TrendingUp className="size-3.5" />}
+    <div className="flex flex-col gap-3">
+      {/* Selector de unidad + estado de cartera ------------------------------- */}
+      <section className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">
+              Estado de la cartera · {etiquetaPeriodo(hasta, ANIO_PRONOSTICO)}
+            </h3>
+            <p className="mt-0.5 text-xs text-ink-3">
+              {enUnidad.length} registros en {unidad || "—"}. Cada unidad de medida se analiza por separado.
+            </p>
+          </div>
+          {unidades.length > 1 ? (
+            <div
+              role="radiogroup"
+              aria-label="Unidad de medida"
+              className="inline-flex rounded-[5px] border border-line-strong bg-surface p-0.5"
+            >
+              {unidades.map((u) => (
+                <button
+                  key={u.unidad}
+                  type="button"
+                  role="radio"
+                  aria-checked={u.unidad === unidad}
+                  onClick={() => setUnidadElegida(u.unidad)}
+                  className={cn(
+                    "h-7 min-w-14 rounded-[3px] px-3 text-xs font-semibold transition-colors",
+                    u.unidad === unidad
+                      ? "bg-accent text-accent-ink"
+                      : "text-ink-2 hover:bg-surface-3 hover:text-ink",
+                  )}
+                >
+                  {u.unidad}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div>
+          <div
+            className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full"
+            role="img"
+            aria-label={`Semáforo: ${(["verde", "amarillo", "rojo", "sin-real"] as EstadoCumplimiento[])
+              .map((e) => `${resumen.porEstado[e]} ${ETIQUETAS_ESTADO[e]}`)
+              .join(", ")}`}
+          >
+            {(["verde", "amarillo", "rojo", "sin-real"] as EstadoCumplimiento[]).map((estado) =>
+              resumen.porEstado[estado] > 0 ? (
+                <span
+                  key={estado}
+                  className={cn("h-full", ESTILOS_ESTADO[estado].barra)}
+                  style={{ width: `${(resumen.porEstado[estado] / Math.max(totalSemaforo, 1)) * 100}%` }}
+                />
+              ) : null,
+            )}
+          </div>
+          <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
+            {(["verde", "amarillo", "rojo", "sin-real"] as EstadoCumplimiento[]).map((estado) => {
+              const { icono: Icono, texto } = ESTILOS_ESTADO[estado];
+              return (
+                <li key={estado} className="flex items-center gap-1.5 text-xs text-ink-2">
+                  <Icono className={cn("size-3.5", texto)} aria-hidden />
+                  {ETIQUETAS_ESTADO[estado]}
+                  <span className="num font-semibold text-ink">{resumen.porEstado[estado]}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </section>
+
+      {/* Demanda por vendedor + cumplimiento ---------------------------------- */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
+        <Panel
+          titulo="Demanda por vendedor"
+          descripcion={`Pronóstico ${unidad} acumulado del periodo, desglosado por mes.`}
+          className="xl:col-span-3"
+          acciones={
+            <ul className="flex items-center gap-3 text-xs text-ink-2" aria-label="Leyenda de meses">
+              {mesesPeriodo.map((mes) => (
+                <li key={mes.key} className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-[2px]" style={{ background: COLOR_MES[mes.key] }} />
+                  {mes.nombre}
+                </li>
+              ))}
+            </ul>
+          }
+        >
+          <div className="flex h-full flex-col">
+          <div className="flex-1" style={{ minHeight: Math.max(filasVendedor.length * 40 + 36, 160) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={filasVendedor}
+                layout="vertical"
+                margin={{ top: 0, right: 64, bottom: 0, left: 0 }}
+                barCategoryGap={10}
+              >
+                <CartesianGrid stroke="var(--viz-grid)" horizontal={false} />
+                <XAxis
+                  type="number"
+                  tick={EJE}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(valor) => formatearCompacto(Number(valor))}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="corto"
+                  width={112}
+                  tick={{ ...EJE, fill: "var(--ink)" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "var(--line-strong)" }}
+                />
+                <Tooltip
+                  cursor={{ fill: "var(--surface-3)", opacity: 0.6 }}
+                  content={<TooltipVendedor unidad={unidad} />}
+                />
+                {mesesPeriodo.map((mes) => (
+                  <Bar
+                    key={mes.key}
+                    dataKey={mes.key}
+                    name={mes.nombre}
+                    stackId="demanda"
+                    fill={COLOR_MES[mes.key]}
+                    stroke="var(--surface)"
+                    strokeWidth={2}
+                    maxBarSize={22}
+                    isAnimationActive={false}
+                  >
+                    {mes.key === ultimoMes ? (
+                      <LabelList
+                        dataKey="total"
+                        position="right"
+                        offset={8}
+                        formatter={(valor: unknown) => formatearCompacto(Number(valor))}
+                        style={{ fill: "var(--ink)", fontSize: 12, fontWeight: 600 }}
+                      />
+                    ) : null}
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <details className="mt-3 text-xs">
+            <summary className="w-fit cursor-pointer font-medium text-accent hover:text-accent-hover">
+              Ver como tabla
+            </summary>
+            <div className="mt-2 overflow-x-auto rounded-md border border-line">
+              <table className="w-full min-w-max">
+                <thead className="bg-surface-2 text-left">
+                  <tr>
+                    <th className="rotulo px-3 py-1.5 text-ink-2">Vendedor</th>
+                    {mesesPeriodo.map((mes) => (
+                      <th key={mes.key} className="rotulo px-3 py-1.5 text-right text-ink-2">
+                        {mes.label}
+                      </th>
+                    ))}
+                    <th className="rotulo px-3 py-1.5 text-right text-ink-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filasVendedor.map((fila) => (
+                    <tr key={fila.vendedor} className="border-t border-line">
+                      <td className="px-3 py-1.5">{fila.vendedor}</td>
+                      {mesesPeriodo.map((mes) => (
+                        <td key={mes.key} className="num px-3 py-1.5 text-right">
+                          {formatearNumero(fila[mes.key])}
+                        </td>
+                      ))}
+                      <td className="num px-3 py-1.5 text-right font-semibold">{formatearNumero(fila.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          </div>
+        </Panel>
+
+        <Panel
+          titulo="Cumplimiento por vendedor"
+          descripcion="Real + avance contra la demanda del periodo."
           className="xl:col-span-2"
         >
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={datosMensual} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-              <CartesianGrid stroke={colorGrid} vertical={false} />
-              <XAxis
-                dataKey="mes"
-                tick={{ fill: colorTexto, fontSize: 12 }}
-                tickLine={false}
-                axisLine={{ stroke: colorGrid }}
-              />
-              <YAxis
-                tick={{ fill: colorTexto, fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                width={64}
-                tickFormatter={(valor) => formatearNumero(Number(valor))}
-              />
-              <Tooltip content={<TooltipGrafico />} cursor={{ fill: colorCursor }} />
-              <Bar
-                dataKey="total"
-                name="Demanda"
-                fill={colorBarra}
-                radius={[6, 6, 0, 0]}
-                maxBarSize={56}
-              />
-              <Line
-                type="monotone"
-                dataKey="total"
-                stroke={colorLinea}
-                strokeWidth={2}
-                dot={{ r: 3, fill: colorLinea }}
-                activeDot={{ r: 5 }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </TarjetaGrafico>
-
-        <TarjetaGrafico
-          titulo="Distribución por Refinería"
-          descripcion="Volumen total requerido: PETROPERU vs IMPORTADO y demás orígenes."
-          icono={<IconoPastel className="size-3.5" />}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-              <Pie
-                data={porRefineria}
-                dataKey="total"
-                nameKey="etiqueta"
-                innerRadius="55%"
-                outerRadius="82%"
-                paddingAngle={2}
-                stroke={colorFondo}
-                strokeWidth={2}
-              >
-                {porRefineria.map((fila) => (
-                  <Cell key={fila.etiqueta} fill={colorRefineria(fila.etiqueta)} />
-                ))}
-              </Pie>
-              <Tooltip content={<TooltipGrafico />} />
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                formatter={(valor) => (
-                  <span className="text-xs text-slate-600 dark:text-slate-300">
-                    {String(valor)}
-                  </span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </TarjetaGrafico>
+          <ul className="flex flex-col gap-3.5">
+            {cumplimientoVendedor.map((fila) => {
+              const ancho = fila.ratio === null ? 0 : Math.min(fila.ratio, 1) * 100;
+              return (
+                <li key={fila.etiqueta}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 truncate text-[13px] font-medium text-ink" title={fila.etiqueta}>
+                      {nombreCorto(fila.etiqueta)}
+                    </p>
+                    <EstadoPastilla estado={fila.estado} ratio={fila.ratio} />
+                  </div>
+                  <div
+                    className="relative mt-1.5 h-2 w-full rounded-full"
+                    style={{ background: "var(--viz-track)" }}
+                    role="img"
+                    aria-label={`${fila.etiqueta}: ${formatearPorcentaje(fila.ratio)} de cumplimiento`}
+                  >
+                    <div
+                      className={cn("h-full rounded-full", ESTILOS_ESTADO[fila.estado].barra)}
+                      style={{ width: `${ancho}%` }}
+                    />
+                    {/* Marcas de los umbrales del semáforo. */}
+                    {[UMBRAL_AMARILLO, UMBRAL_VERDE].map((umbral) => (
+                      <span
+                        key={umbral}
+                        aria-hidden
+                        className="absolute -top-0.5 h-3 w-px bg-ink-3/60"
+                        style={{ left: `${umbral * 100}%` }}
+                      />
+                    ))}
+                  </div>
+                  <p className="num mt-1 text-[11px] text-ink-3">
+                    {fila.ratio === null ? "Sin real cargado" : `${formatearNumero(fila.real)} despachado`} de{" "}
+                    {formatearNumero(fila.demanda)} {unidad}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-4 border-t border-line pt-3 text-[11px] text-ink-3">
+            Marcas en {UMBRAL_AMARILLO * 100}% y {UMBRAL_VERDE * 100}%.{" "}
+            {hayReal ? "" : "Carga el real en la tabla (columna «Real») para ver el avance."}
+          </p>
+        </Panel>
       </div>
 
-      <TarjetaGrafico
-        titulo="Demanda por Grupo de Línea"
-        descripcion="Categorías de producto ordenadas por volumen proyectado (mayor primero)."
-        icono={<BarChart3 className="size-3.5" />}
-        altura="h-[22rem]"
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={datosGrupo} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
-            <CartesianGrid stroke={colorGrid} horizontal={false} />
-            <XAxis
-              type="number"
-              tick={{ fill: colorTexto, fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(valor) => formatearNumero(Number(valor))}
-            />
-            <YAxis
-              type="category"
-              dataKey="etiqueta"
-              width={170}
-              tick={{ fill: colorTexto, fontSize: 11 }}
-              tickLine={false}
-              axisLine={{ stroke: colorGrid }}
-            />
-            <Tooltip content={<TooltipGrafico />} cursor={{ fill: colorCursor }} />
-            <Bar dataKey="total" name="Demanda" radius={[0, 6, 6, 0]} maxBarSize={28}>
-              {datosGrupo.map((fila, indice) => (
-                <Cell
-                  key={fila.etiqueta}
-                  fill={PALETA_GRUPO[(porGrupo.length - 1 - indice) % PALETA_GRUPO.length]}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </TarjetaGrafico>
+      {/* Clientes y productos --------------------------------------------------- */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Panel titulo="Principales clientes" descripcion={`Top 10 por demanda del periodo (${unidad}).`}>
+          <ol className="flex flex-col gap-2.5">
+            {topClientes.map((fila, indice) => (
+              <li key={fila.etiqueta} className="grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-2.5">
+                <span className="num text-xs text-ink-3">{indice + 1}</span>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] text-ink" title={fila.etiqueta}>
+                    {fila.etiqueta}
+                  </p>
+                  <div className="mt-1 h-1.5 rounded-full" style={{ background: "var(--viz-track)" }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${(fila.demanda / maxCliente) * 100}%`, background: "var(--viz-bar)" }}
+                    />
+                  </div>
+                </div>
+                <span className="num text-[13px] font-semibold text-ink">{formatearCompacto(fila.demanda)}</span>
+              </li>
+            ))}
+          </ol>
+        </Panel>
 
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+        <Panel
+          titulo="Demanda por producto"
+          descripcion={`Los 8 productos con mayor volumen (${unidad}).`}
+        >
+          <div style={{ height: Math.max(topProductos.length * 36 + 20, 160) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={topProductos}
+                layout="vertical"
+                margin={{ top: 0, right: 56, bottom: 0, left: 0 }}
+                barCategoryGap={12}
+              >
+                <CartesianGrid stroke="var(--viz-grid)" horizontal={false} />
+                <XAxis
+                  type="number"
+                  tick={EJE}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(valor) => formatearCompacto(Number(valor))}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="etiqueta"
+                  width={150}
+                  tick={{ ...EJE, fill: "var(--ink)" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "var(--line-strong)" }}
+                  tickFormatter={(valor: string) => (valor.length > 22 ? `${valor.slice(0, 21)}…` : valor)}
+                />
+                <Tooltip
+                  cursor={{ fill: "var(--surface-3)", opacity: 0.6 }}
+                  content={<TooltipSimple unidad={unidad} />}
+                />
+                <Bar
+                  dataKey="demanda"
+                  fill="var(--viz-bar)"
+                  maxBarSize={16}
+                  radius={[0, 4, 4, 0]}
+                  isAnimationActive={false}
+                >
+                  <LabelList
+                    dataKey="demanda"
+                    position="right"
+                    offset={8}
+                    formatter={(valor: unknown) => formatearCompacto(Number(valor))}
+                    style={{ fill: "var(--ink)", fontSize: 12, fontWeight: 600 }}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+      </div>
+
+      <p className="text-[11px] text-ink-3">
         Gráficos calculados sobre la vista actual ({registros.length} registro
-        {registros.length === 1 ? "" : "s"} filtrado{registros.length === 1 ? "" : "s"}) · la
-        cantidad suma todas las unidades de medida.
+        {registros.length === 1 ? "" : "s"}) · demanda total del periodo en {unidad}:{" "}
+        <span className="num font-medium text-ink-2">
+          {formatearNumero(enUnidad.reduce((acc, r) => acc + totalDemanda(r, meses), 0))}
+        </span>
       </p>
     </div>
   );
