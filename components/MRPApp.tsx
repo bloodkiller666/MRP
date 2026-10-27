@@ -7,6 +7,7 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  FlaskConical,
   LayoutDashboard,
   Plus,
   RotateCcw,
@@ -16,6 +17,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ColumnasSelector } from "@/components/ColumnasSelector";
@@ -377,6 +379,14 @@ export function MRPApp() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href="/costos"
+              title="Costos PLUS: costos de asfaltos grado A, B y C"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-chrome-line px-3 text-sm font-medium text-chrome-ink transition-colors hover:bg-chrome-2"
+            >
+              <FlaskConical className="size-4 text-chrome-ink-2" />
+              <span className="hidden md:inline">Costos PLUS</span>
+            </Link>
             <button
               type="button"
               onClick={abrirNuevo}
