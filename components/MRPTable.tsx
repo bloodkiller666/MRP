@@ -3,19 +3,15 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, EyeOff, Inbox, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import {
-  CAMPOS_TEXTO,
-  ETIQUETAS_CAMPO,
-  MESES,
-  TIPOS_APLICACION,
-  UNIDADES_MEDIDA,
-} from "@/lib/constants";
+import { CAMPOS_TEXTO, ETIQUETAS_CAMPO, TIPOS_APLICACION, UNIDADES_MEDIDA } from "@/lib/constants";
 import {
   cumplimientoRegistro,
   formatearNumero,
-  mesesHasta,
+  resumenPorUnidad,
   resumirPeriodo,
+  type ResumenPeriodo,
 } from "@/lib/mrp-utils";
+import { abarcaVariosAnios, anioDeMes, etiquetaMes, nombreMes } from "@/lib/periodos";
 import type { CampoTextoMRP, ColumnaTabla, EstadoCumplimiento, MesKey, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +25,8 @@ interface MRPTableProps {
   totalSinFiltrar: number;
   /** Columnas de texto ocultas. Solo afecta a la vista, nunca a los totales. */
   ocultas: ColumnaTabla[];
-  /** Último mes del periodo (el pronóstico se muestra desde octubre). */
-  hasta: MesKey;
+  /** Meses que se muestran (del inicio del periodo hasta el mes elegido). */
+  meses: MesKey[];
   alActualizarCampo: (id: string, campo: CampoTextoMRP, valor: string) => void;
   alActualizarProyeccion: (id: string, mes: MesKey, valor?: number) => void;
   alActualizarReal: (id: string, mes: MesKey, valor?: number) => void;
@@ -49,7 +45,8 @@ const POS_CUMPL = "sticky right-16";
 const POS_REAL = "sticky right-[14.5rem]";
 const POS_DEMANDA = "sticky right-[22.5rem]";
 const CELDA_CIERRE = "z-[5] border-b border-line bg-surface-2 px-3 py-2 text-[13px]";
-const PIE_CIERRE = "bottom-0 z-20 border-t border-line-strong bg-chrome px-3 py-2.5 text-chrome-ink";
+const ALTO_PIE = 2.5;
+const PIE_CIERRE = "z-20 h-10 border-t border-line-strong bg-chrome px-3 py-0 text-chrome-ink";
 
 /** Ancho máximo del texto de cada columna (se trunca con «…»; el título muestra el valor completo). */
 const ANCHO_TEXTO: Partial<Record<CampoTextoMRP, string>> = {
@@ -121,7 +118,7 @@ export function MRPTable({
   registros,
   totalSinFiltrar,
   ocultas,
-  hasta,
+  meses,
   alActualizarCampo,
   alActualizarProyeccion,
   alActualizarReal,
@@ -132,11 +129,21 @@ export function MRPTable({
   /** En móvil las tarjetas se muestran de 20 en 20. */
   const [limiteMovil, setLimiteMovil] = useState(20);
 
-  const meses = useMemo(() => mesesHasta(hasta), [hasta]);
-  const mesesVisibles = MESES.filter((mes) => meses.includes(mes.key));
+  const variosAnios = abarcaVariosAnios(meses);
+  const mesesVisibles = useMemo(
+    () =>
+      meses.map((key) => ({
+        key,
+        label: variosAnios ? `${etiquetaMes(key)} ${anioDeMes(key)}` : etiquetaMes(key),
+        nombre: variosAnios ? `${etiquetaMes(key)} ${anioDeMes(key)}` : nombreMes(key),
+      })),
+    [meses, variosAnios],
+  );
   const camposVisibles = CAMPOS_TEXTO.filter((campo) => !ocultas.includes(campo));
   const resumen = useMemo(() => resumirPeriodo(registros, meses), [registros, meses]);
-  const hayVariasUM = new Set(registros.map((r) => r.unidadMedida.trim()).filter(Boolean)).size > 1;
+  // Nunca se suman unidades distintas: con varias UM el pie trae un total por cada una.
+  const porUnidad = useMemo(() => resumenPorUnidad(registros, meses), [registros, meses]);
+  const hayVariasUM = porUnidad.length > 1;
 
   const filas = useMemo(() => {
     const conCumplimiento = registros.map((registro) => ({
@@ -373,35 +380,22 @@ export function MRPTable({
           </tbody>
 
           <tfoot>
-            <tr>
-              <td
-                colSpan={Math.max(camposVisibles.length, 1)}
-                className="sticky bottom-0 z-10 border-t border-line-strong bg-chrome px-3 py-2.5 text-chrome-ink"
-              >
-                <span className="rotulo">Total del periodo</span>
-                <span className="ml-2 text-xs font-normal text-chrome-ink-2">
-                  {registros.length} de {totalSinFiltrar} registros
-                </span>
-              </td>
-              {mesesVisibles.map((mes) => (
-                <TotalesMes
-                  key={mes.key}
-                  demanda={resumen.porMes[mes.key].demanda}
-                  real={resumen.porMes[mes.key].real}
-                  conReal={resumen.porMes[mes.key].conReal}
+            {(hayVariasUM ? porUnidad : [{ unidad: "", registros: registros.length, resumen }]).map(
+              ({ unidad, resumen: r, registros: cantidad }, indice, lista) => (
+                <FilaPie
+                  key={unidad || "total"}
+                  etiqueta={hayVariasUM ? `Total ${unidad}` : "Total del periodo"}
+                  detalle={
+                    hayVariasUM ? `${cantidad} registros` : `${registros.length} de ${totalSinFiltrar} registros`
+                  }
+                  resumen={r}
+                  meses={meses}
+                  columnasTexto={Math.max(camposVisibles.length, 1)}
+                  // Cada fila de totales se ancla sobre la anterior al hacer scroll vertical.
+                  inferior={`${(lista.length - 1 - indice) * ALTO_PIE}rem`}
                 />
-              ))}
-              <td className={cn(PIE_CIERRE, POS_DEMANDA, "num border-l text-right font-semibold")}>
-                {formatearNumero(resumen.demanda)}
-              </td>
-              <td className={cn(PIE_CIERRE, POS_REAL, "num text-right font-semibold")}>
-                {resumen.ratio === null ? "–" : formatearNumero(resumen.real)}
-              </td>
-              <td className={cn(PIE_CIERRE, POS_CUMPL)}>
-                <EstadoPastilla estado={resumen.estado} ratio={resumen.ratio} className="bg-surface" />
-              </td>
-              <td className="sticky right-0 bottom-0 z-20 border-t border-line-strong bg-chrome" />
-            </tr>
+              ),
+            )}
           </tfoot>
         </table>
       </div>
@@ -432,15 +426,15 @@ export function MRPTable({
                 <EstadoPastilla estado={c.estado} ratio={c.ratio} />
               </div>
 
-              <dl className="mt-3 grid grid-cols-[auto_repeat(3,1fr)] gap-x-3 gap-y-1 text-xs">
+              <dl
+                className="mt-3 grid gap-x-3 gap-y-1 overflow-x-auto text-xs"
+                style={{ gridTemplateColumns: `auto repeat(${mesesVisibles.length}, minmax(3.25rem, 1fr))` }}
+              >
                 <dt />
                 {mesesVisibles.map((mes) => (
                   <dd key={mes.key} className="rotulo text-right text-ink-3">
                     {mes.label}
                   </dd>
-                ))}
-                {Array.from({ length: 3 - mesesVisibles.length }, (_, i) => (
-                  <dd key={`vacio-${i}`} />
                 ))}
 
                 <dt className="text-ink-3">Pronóstico</dt>
@@ -449,18 +443,12 @@ export function MRPTable({
                     {formatearNumero(registro.proyecciones[mes.key])}
                   </dd>
                 ))}
-                {Array.from({ length: 3 - mesesVisibles.length }, (_, i) => (
-                  <dd key={`v1-${i}`} />
-                ))}
 
                 <dt className="text-ink-3">Real</dt>
                 {mesesVisibles.map((mes) => (
                   <dd key={mes.key} className="num text-right text-ink">
                     {formatearNumero(registro.reales[mes.key])}
                   </dd>
-                ))}
-                {Array.from({ length: 3 - mesesVisibles.length }, (_, i) => (
-                  <dd key={`v2-${i}`} />
                 ))}
               </dl>
 
@@ -519,8 +507,9 @@ export function MRPTable({
         </span>
         <span>Cumplimiento = (real + avance) ÷ demanda del periodo</span>
         {hayVariasUM ? (
-          <span className="text-warn">
-            Los totales suman GLN y KG sin conversión: filtra por UM («Más filtros») para ver una sola unidad.
+          <span className="text-ink-2">
+            Totales separados por unidad de medida ({porUnidad.map((u) => u.unidad).join(" y ")}): no se suman entre
+            sí.
           </span>
         ) : null}
         {ocultas.length > 0 ? (
@@ -643,13 +632,77 @@ function FragmentoMes({
   );
 }
 
+/** Una fila de totales del pie (una por unidad de medida, o una sola si hay una UM). */
+function FilaPie({
+  etiqueta,
+  detalle,
+  resumen,
+  meses,
+  columnasTexto,
+  inferior,
+}: {
+  etiqueta: string;
+  detalle: string;
+  resumen: ResumenPeriodo;
+  meses: MesKey[];
+  columnasTexto: number;
+  inferior: string;
+}) {
+  const sticky = { bottom: inferior };
+  return (
+    <tr>
+      <td
+        colSpan={columnasTexto}
+        style={sticky}
+        className="sticky z-10 h-10 border-t border-line-strong bg-chrome px-3 py-0 text-chrome-ink"
+      >
+        <span className="rotulo">{etiqueta}</span>
+        <span className="ml-2 text-xs font-normal text-chrome-ink-2">{detalle}</span>
+      </td>
+      {meses.map((mes) => (
+        <TotalesMes
+          key={mes}
+          demanda={resumen.porMes[mes].demanda}
+          real={resumen.porMes[mes].real}
+          conReal={resumen.porMes[mes].conReal}
+          inferior={inferior}
+        />
+      ))}
+      <td style={sticky} className={cn(PIE_CIERRE, POS_DEMANDA, "num border-l text-right font-semibold")}>
+        {formatearNumero(resumen.demanda)}
+      </td>
+      <td style={sticky} className={cn(PIE_CIERRE, POS_REAL, "num text-right font-semibold")}>
+        {resumen.ratio === null ? "–" : formatearNumero(resumen.real)}
+      </td>
+      <td style={sticky} className={cn(PIE_CIERRE, POS_CUMPL)}>
+        <EstadoPastilla estado={resumen.estado} ratio={resumen.ratio} className="bg-surface" />
+      </td>
+      <td style={sticky} className="sticky right-0 z-20 h-10 border-t border-line-strong bg-chrome" />
+    </tr>
+  );
+}
+
 /** Totales de un mes en el pie de la tabla. */
-function TotalesMes({ demanda, real, conReal }: { demanda: number; real: number; conReal: boolean }) {
-  const base = "num sticky bottom-0 z-10 border-t border-line-strong bg-chrome px-3 py-2.5 text-right font-semibold";
+function TotalesMes({
+  demanda,
+  real,
+  conReal,
+  inferior,
+}: {
+  demanda: number;
+  real: number;
+  conReal: boolean;
+  inferior: string;
+}) {
+  const base = "num sticky z-10 h-10 border-t border-line-strong bg-chrome px-3 py-0 text-right font-semibold";
   return (
     <>
-      <td className={cn(base, "border-l text-chrome-ink")}>{formatearNumero(demanda)}</td>
-      <td className={cn(base, "text-chrome-ink-2")}>{conReal ? formatearNumero(real) : "–"}</td>
+      <td style={{ bottom: inferior }} className={cn(base, "border-l text-chrome-ink")}>
+        {formatearNumero(demanda)}
+      </td>
+      <td style={{ bottom: inferior }} className={cn(base, "text-chrome-ink-2")}>
+        {conReal ? formatearNumero(real) : "–"}
+      </td>
     </>
   );
 }

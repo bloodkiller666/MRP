@@ -1,13 +1,13 @@
-import { ANIO_PRONOSTICO, ETIQUETAS_CAMPO, ETIQUETAS_ESTADO, MESES, REGLA_ESTADO } from "./constants";
+import { ETIQUETAS_CAMPO, ETIQUETAS_ESTADO, REGLA_ESTADO } from "./constants";
 import {
   cumplimientoRegistro,
-  etiquetaPeriodo,
   formatearNumero,
   formatearPorcentaje,
-  mesesHasta,
+  resumenPorUnidad,
   resumirPeriodo,
   totalesPorUnidad,
 } from "./mrp-utils";
+import { abarcaVariosAnios, etiquetaMes, etiquetaMesAnio, etiquetaRango } from "./periodos";
 import type { CampoTextoMRP, ColumnaTabla, EstadoCumplimiento, MesKey, RegistroMRP } from "./types";
 
 /**
@@ -60,8 +60,8 @@ const COLOR_ESTADO: Record<EstadoCumplimiento, [number, number, number]> = {
 export interface OpcionesPdf {
   /** Registros de la vista actual (ya filtrados). */
   registros: RegistroMRP[];
-  /** Último mes del periodo (desde octubre). */
-  hasta: MesKey;
+  /** Meses del periodo que se imprimen (hasta el mes elegido). */
+  meses: MesKey[];
   /** Filtros activos, para dejarlos escritos en el encabezado. */
   filtrosAplicados?: string[];
   /** Término del buscador global, si hay uno activo. */
@@ -90,7 +90,7 @@ function fechaLegible(): string {
  */
 export async function construirPdfMRP({
   registros,
-  hasta,
+  meses,
   filtrosAplicados = [],
   busqueda,
   columnasOcultas = [],
@@ -102,12 +102,13 @@ export async function construirPdfMRP({
   const { jsPDF } = await import("jspdf");
   const { autoTable } = await import("jspdf-autotable");
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  // Con muchos meses la tabla necesita más ancho: se pasa a A3.
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: meses.length > 4 ? "a3" : "a4" });
   const anchoPagina = doc.internal.pageSize.getWidth();
   const margen = 24;
 
-  const meses = mesesHasta(hasta);
-  const etiquetaMes = (clave: MesKey) => MESES.find((mes) => mes.key === clave)?.label ?? clave;
+  const rotuloMes = abarcaVariosAnios(meses) ? etiquetaMesAnio : etiquetaMes;
+  const porUnidad = resumenPorUnidad(registros, meses);
   const columnasTexto = COLUMNAS_TEXTO.filter((campo) => !columnasOcultas.includes(campo));
   const resumen = resumirPeriodo(registros, meses);
 
@@ -122,7 +123,7 @@ export async function construirPdfMRP({
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
   doc.text(
-    `Pronóstico ${etiquetaPeriodo(hasta, ANIO_PRONOSTICO)} · Generado el ${fechaLegible()}`,
+    `Pronóstico ${etiquetaRango(meses)} · Generado el ${fechaLegible()}`,
     margen,
     margen + 26,
   );
@@ -133,7 +134,11 @@ export async function construirPdfMRP({
   doc.setTextColor(15, 23, 42);
   doc.text(
     `${registros.length} registro${registros.length === 1 ? "" : "s"} · ` +
-      `Cumplimiento global ${formatearPorcentaje(resumen.ratio)} (${ETIQUETAS_ESTADO[resumen.estado]})`,
+      (porUnidad.length > 1
+        ? porUnidad
+            .map((u) => `${u.unidad}: ${formatearPorcentaje(u.resumen.ratio)} (${ETIQUETAS_ESTADO[u.resumen.estado]})`)
+            .join(" · ")
+        : `Cumplimiento global ${formatearPorcentaje(resumen.ratio)} (${ETIQUETAS_ESTADO[resumen.estado]})`),
     margen,
     margen + 52,
   );
@@ -142,7 +147,7 @@ export async function construirPdfMRP({
 
   const encabezados = [
     ...columnasTexto.map((campo) => ETIQUETAS_CAMPO[campo]),
-    ...meses.flatMap((mes) => [`Pron. ${etiquetaMes(mes)}`, `Real ${etiquetaMes(mes)}`]),
+    ...meses.flatMap((mes) => [`Pron. ${rotuloMes(mes)}`, `Real ${rotuloMes(mes)}`]),
     "Total demanda",
     "Real + avance",
     "Cumpl.",
@@ -181,19 +186,18 @@ export async function construirPdfMRP({
     startY: margen + 62,
     head: [encabezados],
     body: cuerpo,
-    foot: [
-      [
-        "TOTAL",
-        ...Array.from({ length: Math.max(columnasTexto.length - 1, 0) }, () => ""),
-        ...meses.flatMap((mes) => [
-          formatearNumero(resumen.porMes[mes].demanda),
-          resumen.porMes[mes].conReal ? formatearNumero(resumen.porMes[mes].real) : "",
-        ]),
-        formatearNumero(resumen.demanda),
-        formatearNumero(resumen.real),
-        formatearPorcentaje(resumen.ratio),
-      ],
-    ],
+    // Nunca se suman unidades distintas: un pie de totales por cada UM.
+    foot: porUnidad.map(({ unidad, resumen: r }) => [
+      porUnidad.length > 1 ? `TOTAL ${unidad}` : "TOTAL",
+      ...Array.from({ length: Math.max(columnasTexto.length - 1, 0) }, () => ""),
+      ...meses.flatMap((mes) => [
+        formatearNumero(r.porMes[mes].demanda),
+        r.porMes[mes].conReal ? formatearNumero(r.porMes[mes].real) : "",
+      ]),
+      formatearNumero(r.demanda),
+      r.ratio === null ? "" : formatearNumero(r.real),
+      formatearPorcentaje(r.ratio),
+    ]),
     theme: "grid",
     styles: {
       font: "helvetica",
@@ -264,11 +268,11 @@ export async function construirPdfMRP({
   doc.setTextColor(15, 23, 42);
   doc.text("Totales por unidad de medida", margen + anchoBloque + 16, yBloque - 6);
 
-  const porUnidad = totalesPorUnidad(registros, meses);
+  const totalesUnidad = totalesPorUnidad(registros, meses);
   autoTable(doc, {
     startY: yBloque,
     head: [["UM", "Registros", "Total demanda", "Real + avance"]],
-    body: porUnidad.map((fila) => [
+    body: totalesUnidad.map((fila) => [
       fila.unidad,
       String(fila.registros),
       formatearNumero(fila.demanda),

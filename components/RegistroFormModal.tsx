@@ -3,8 +3,9 @@
 import { AlertTriangle, CalendarRange, Package, Save, UserRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import { CAMPOS_TEXTO, ETIQUETAS_CAMPO, MESES } from "@/lib/constants";
+import { CAMPOS_TEXTO, ETIQUETAS_CAMPO } from "@/lib/constants";
 import { formatearNumero } from "@/lib/mrp-utils";
+import { abarcaVariosAnios, anioDeMes, etiquetaRango, nombreMes } from "@/lib/periodos";
 import type { CampoTextoMRP, CantidadesMes, MesKey, RegistroMRP } from "@/lib/types";
 import { parsearNumero } from "@/lib/utils";
 
@@ -29,6 +30,8 @@ interface PropsFormulario {
    * en la tabla. Alimentan los selectores con modo "Agregar nuevo valor".
    */
   sugerencias: Record<CampoTextoMRP, string[]>;
+  /** Meses del periodo activo: son los que el formulario permite cargar. */
+  meses: MesKey[];
 }
 
 /** Campos que se agrupan en cada sección del formulario. */
@@ -54,12 +57,12 @@ function texto(valor: number | undefined): string {
 }
 
 /** Borrador vacío (o precargado) del formulario. */
-function borradorInicial(registro?: RegistroMRP | null): Borrador {
+function borradorInicial(meses: MesKey[], registro?: RegistroMRP | null): Borrador {
   const base = {} as Borrador;
   for (const campo of CAMPOS_TEXTO) base[campo] = registro?.[campo] ?? "";
-  for (const mes of MESES) {
-    base[`pron_${mes.key}`] = texto(registro?.proyecciones[mes.key]);
-    base[`real_${mes.key}`] = texto(registro?.reales[mes.key]);
+  for (const mes of meses) {
+    base[`pron_${mes}`] = texto(registro?.proyecciones[mes]);
+    base[`real_${mes}`] = texto(registro?.reales[mes]);
   }
   return base;
 }
@@ -103,10 +106,11 @@ export function RegistroFormModal({
   onGuardar,
   registro,
   sugerencias,
+  meses,
 }: PropsFormulario) {
   // El modal se monta desde cero en cada apertura, por lo que el estado inicial
   // del formulario ya refleja el registro a editar (o uno vacío).
-  const [borrador, setBorrador] = useState<Borrador>(() => borradorInicial(registro));
+  const [borrador, setBorrador] = useState<Borrador>(() => borradorInicial(meses, registro));
   const [errores, setErrores] = useState<Partial<Record<ClaveBorrador, string>>>({});
   const [intentoGuardar, setIntentoGuardar] = useState(false);
 
@@ -130,8 +134,8 @@ export function RegistroFormModal({
       if (mensaje && !borrador[campo].trim()) encontrados[campo] = mensaje;
     }
 
-    for (const mes of MESES) {
-      for (const clave of [`pron_${mes.key}`, `real_${mes.key}`] as const) {
+    for (const mes of meses) {
+      for (const clave of [`pron_${mes}`, `real_${mes}`] as const) {
         const valor = borrador[clave].trim();
         if (valor !== "" && parsearNumero(valor) === undefined) encontrados[clave] = "Valor no numérico";
       }
@@ -140,11 +144,19 @@ export function RegistroFormModal({
     return encontrados;
   };
 
+  /**
+   * Lee los meses del formulario. Los meses de otros periodos que ya tuviera el
+   * registro se conservan tal cual: editar un periodo no borra los demás.
+   */
   const leerMeses = (prefijo: "pron" | "real"): CantidadesMes => {
+    const previas = prefijo === "pron" ? registro?.proyecciones : registro?.reales;
     const cantidades: CantidadesMes = {};
-    for (const mes of MESES) {
-      const valor = parsearNumero(borrador[`${prefijo}_${mes.key}`]);
-      if (valor !== undefined) cantidades[mes.key] = valor;
+    for (const [mes, valor] of Object.entries(previas ?? {})) {
+      if (!meses.includes(mes) && valor !== undefined) cantidades[mes] = valor;
+    }
+    for (const mes of meses) {
+      const valor = parsearNumero(borrador[`${prefijo}_${mes}`]);
+      if (valor !== undefined) cantidades[mes] = valor;
     }
     return cantidades;
   };
@@ -174,10 +186,11 @@ export function RegistroFormModal({
     onCerrar();
   };
 
+  const variosAnios = abarcaVariosAnios(meses);
   const esEdicion = Boolean(registro);
   const cantidadErrores = Object.keys(errores).length;
   const suma = (prefijo: "pron" | "real") =>
-    MESES.reduce((acc, mes) => acc + (parsearNumero(borrador[`${prefijo}_${mes.key}`]) ?? 0), 0);
+    meses.reduce((acc, mes) => acc + (parsearNumero(borrador[`${prefijo}_${mes}`]) ?? 0), 0);
 
   /** Render de un campo de texto con selector + valor nuevo. */
   const campoTexto = (campo: CampoTextoMRP) => (
@@ -206,11 +219,12 @@ export function RegistroFormModal({
         <p className="rotulo text-ink">{titulo}</p>
         <p className="text-xs text-ink-3">{ayuda}</p>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        {MESES.map((mes) => {
-          const clave = `${prefijo}_${mes.key}` as const;
+      <div className={meses.length <= 3 ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"}>
+        {meses.map((mes) => {
+          const clave = `${prefijo}_${mes}` as const;
+          const etiqueta = variosAnios ? `${nombreMes(mes)} ${anioDeMes(mes)}` : nombreMes(mes);
           return (
-            <Campo key={clave} etiqueta={mes.nombre} htmlFor={clave} error={errores[clave]}>
+            <Campo key={clave} etiqueta={etiqueta} htmlFor={clave} error={errores[clave]}>
               <Input
                 id={clave}
                 inputMode="decimal"
@@ -232,7 +246,7 @@ export function RegistroFormModal({
       abierto={abierto}
       onCerrar={onCerrar}
       titulo={esEdicion ? "Editar registro" : "Nuevo registro"}
-      descripcion="Vendedor, cliente y producto, con el pronóstico mensual y lo despachado."
+      descripcion={`Vendedor, cliente y producto, con el pronóstico y el real de ${etiquetaRango(meses)}.`}
       tamano="lg"
       pie={
         <>

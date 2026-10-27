@@ -11,11 +11,14 @@ export interface MrpStore {
   /** `true` cuando ya se leyó `localStorage`, para mostrar el estado de guardado. */
   listo: boolean;
   importar: (nuevos: RegistroMRP[]) => number;
+  importarCombinando: (nuevos: RegistroMRP[]) => { anexados: number; actualizados: number };
   agregar: (datos: Omit<RegistroMRP, "id">) => RegistroMRP;
   actualizar: (registro: RegistroMRP) => void;
   actualizarCampo: (id: string, campo: CampoTextoMRP, valor: string) => void;
   actualizarProyeccion: (id: string, mes: MesKey, valor?: number) => void;
   actualizarReal: (id: string, mes: MesKey, valor?: number) => void;
+  actualizarProbabilidad: (id: string, probabilidad?: number) => void;
+  actualizarComentario: (id: string, comentario: string) => void;
   eliminar: (id: string) => void;
   restaurar: () => void;
   vaciar: () => void;
@@ -45,11 +48,14 @@ export function useMrpStore(): MrpStore {
     registros,
     listo,
     importar: mrpStore.importar,
+    importarCombinando: mrpStore.importarCombinando,
     agregar: mrpStore.agregar,
     actualizar: mrpStore.actualizar,
     actualizarCampo: mrpStore.actualizarCampo,
     actualizarProyeccion: mrpStore.actualizarProyeccion,
     actualizarReal: mrpStore.actualizarReal,
+    actualizarProbabilidad: mrpStore.actualizarProbabilidad,
+    actualizarComentario: mrpStore.actualizarComentario,
     eliminar: mrpStore.eliminar,
     restaurar: mrpStore.restaurar,
     vaciar: mrpStore.vaciar,

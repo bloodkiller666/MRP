@@ -5,14 +5,20 @@
  * por lo que estos tipos son la única "fuente de verdad" del modelo de datos.
  */
 
-/** Meses del horizonte de pronóstico (de octubre en adelante). */
-export type MesKey = "oct" | "nov" | "dic";
+/** Mes del seguimiento, con formato `AAAA-MM` (p. ej. `2026-10`). */
+export type MesKey = string;
+
+/** Periodo de seguimiento: `cantidad` meses consecutivos a partir de `desde`. */
+export interface Periodo {
+  desde: MesKey;
+  cantidad: number;
+}
 
 /**
  * Cantidades por mes, en la unidad de medida (UM) del registro.
  * Un mes sin dato queda `undefined`, lo que lo distingue de un cero explícito.
  */
-export type CantidadesMes = Partial<Record<MesKey, number>>;
+export type CantidadesMes = Record<MesKey, number | undefined>;
 
 /** Registro individual: un cliente + producto asignado a un vendedor. */
 export interface RegistroMRP {
@@ -32,10 +38,18 @@ export interface RegistroMRP {
   proyecciones: CantidadesMes;
   /** Despacho real (meses cerrados) + avance (mes en curso). */
   reales: CantidadesMes;
+  /**
+   * Probabilidad de cierre (0-1) con la que se ponderó el pronóstico, como en la columna
+   * PROB del Excel (`volumen × PROB`). Sin valor = 100 %. Las cantidades de `proyecciones`
+   * ya vienen ponderadas.
+   */
+  probabilidad?: number;
+  /** Nota comercial libre (columna COMENTARIO del Excel). */
+  comentario?: string;
 }
 
 /** Campos de texto editables de un registro. */
-export type CampoTextoMRP = Exclude<keyof RegistroMRP, "id" | "proyecciones" | "reales">;
+export type CampoTextoMRP = Exclude<keyof RegistroMRP, "id" | "proyecciones" | "reales" | "probabilidad" | "comentario">;
 
 /**
  * Columnas de datos que el usuario puede **ocultar** para despejar la vista.
@@ -43,11 +57,11 @@ export type CampoTextoMRP = Exclude<keyof RegistroMRP, "id" | "proyecciones" | "
  */
 export type ColumnaTabla = CampoTextoMRP;
 
-/** Clave de una columna de despacho real al mapear un Excel (`real_oct`…). */
-export type ClaveReal = `real_${MesKey}`;
+/** Columna de pronóstico (`pron_2026-10`) o de despacho real (`real_2026-10`) al mapear un Excel. */
+export type ClaveCantidad = `pron_${MesKey}` | `real_${MesKey}`;
 
 /** Cualquier columna "destino" al mapear un archivo Excel. */
-export type CampoDestino = CampoTextoMRP | MesKey | ClaveReal;
+export type CampoDestino = CampoTextoMRP | ClaveCantidad | "probabilidad" | "comentario";
 
 /** Filtros por columna. La cadena vacía significa "sin filtro". */
 export type FiltrosMRP = Record<CampoTextoMRP, string>;

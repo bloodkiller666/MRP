@@ -1,7 +1,8 @@
-import { STORAGE_KEY } from "./constants";
+import { CAMPOS_TEXTO, STORAGE_KEY } from "./constants";
 import { REGISTROS_MOCK } from "./mock-data";
+import { migrarCantidades } from "./periodos";
 import type { CampoTextoMRP, MesKey, RegistroMRP } from "./types";
-import { generarId } from "./utils";
+import { generarId, normalizarTexto } from "./utils";
 
 /**
  * Store del MRP basado en un "external store" de React.
@@ -45,6 +46,11 @@ function establecer(siguiente: RegistroMRP[]) {
   notificar();
 }
 
+/** Una probabilidad válida está en (0, 1]; cualquier otra cosa equivale a «sin ponderar». */
+function probabilidadValida(valor: unknown): number | undefined {
+  return typeof valor === "number" && valor > 0 && valor <= 1 ? valor : undefined;
+}
+
 function esObjeto(valor: unknown): valor is Partial<RegistroMRP> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
 }
@@ -62,8 +68,10 @@ function normalizar(registro: Partial<RegistroMRP>): RegistroMRP {
     refineria: registro.refineria ?? "",
     unidadMedida: registro.unidadMedida ?? "",
     tipoAplicacion: registro.tipoAplicacion ?? "",
-    proyecciones: registro.proyecciones ?? {},
-    reales: registro.reales ?? {},
+    proyecciones: migrarCantidades(registro.proyecciones),
+    reales: migrarCantidades(registro.reales),
+    probabilidad: probabilidadValida(registro.probabilidad),
+    comentario: registro.comentario || undefined,
   };
 }
 
@@ -126,6 +134,52 @@ export const mrpStore = {
     return nuevos.length;
   },
 
+  /**
+   * Importación que **combina**: si una fila ya existe (mismo vendedor, cliente, producto,
+   * proyecto y UM) se completan sus meses de pronóstico/real y sus campos vacíos; si no
+   * existe, se anexa como registro nuevo. Así importar «Real Oct» no duplica la cartera.
+   */
+  importarCombinando(nuevos: RegistroMRP[]): { anexados: number; actualizados: number } {
+    const clave = (r: RegistroMRP, conProyecto: boolean) =>
+      [r.propietario, r.cuenta, r.detalleProducto, r.unidadMedida, conProyecto ? r.proyecto : ""]
+        .map((parte) => normalizarTexto(parte))
+        .join("|");
+
+    const copia = estado.map((r) => ({ ...r }));
+    const usados = new Set<string>();
+    const anexar: RegistroMRP[] = [];
+    let actualizados = 0;
+
+    for (const fila of nuevos) {
+      const completa = clave(fila, true);
+      let destino = copia.find((r) => !usados.has(r.id) && clave(r, true) === completa);
+      if (!destino && !fila.proyecto.trim()) {
+        const candidatos = copia.filter((r) => !usados.has(r.id) && clave(r, false) === clave(fila, false));
+        if (candidatos.length === 1) destino = candidatos[0];
+      }
+
+      if (!destino) {
+        anexar.push(fila);
+        continue;
+      }
+
+      usados.add(destino.id);
+      actualizados += 1;
+      destino.proyecciones = { ...destino.proyecciones, ...fila.proyecciones };
+      destino.reales = { ...destino.reales, ...fila.reales };
+      for (const campo of CAMPOS_TEXTO) {
+        if (!destino[campo].trim() && fila[campo].trim()) destino[campo] = fila[campo];
+      }
+      // La probabilidad y el comentario del archivo reemplazan a los guardados solo si vienen con valor.
+      // Las cantidades del archivo ya vienen ponderadas (así lo calcula el Excel): no se reponderan.
+      if (fila.probabilidad !== undefined) destino.probabilidad = fila.probabilidad;
+      if (fila.comentario) destino.comentario = fila.comentario;
+    }
+
+    establecer([...copia, ...anexar]);
+    return { anexados: anexar.length, actualizados };
+  },
+
   /** Crea un registro a partir de los datos del formulario. */
   agregar(datos: Omit<RegistroMRP, "id">): RegistroMRP {
     const nuevo: RegistroMRP = { ...datos, id: generarId() };
@@ -160,6 +214,36 @@ export const mrpStore = {
         if (registro.id !== id) return registro;
         return { ...registro, reales: { ...registro.reales, [mes]: valor } };
       }),
+    );
+  },
+
+  /**
+   * Recalcula el pronóstico con una nueva probabilidad de cierre, igual que el Excel
+   * (`volumen × PROB`): cada mes se reescala por nueva ÷ anterior. `undefined` = 100 %.
+   */
+  actualizarProbabilidad(id: string, probabilidad?: number): void {
+    const nueva = probabilidadValida(probabilidad);
+    establecer(
+      estado.map((registro) => {
+        if (registro.id !== id) return registro;
+        const factor = (nueva ?? 1) / (registro.probabilidad ?? 1);
+        const proyecciones = Object.fromEntries(
+          Object.entries(registro.proyecciones).map(([mes, valor]) => [
+            mes,
+            valor === undefined ? valor : Math.round(valor * factor * 100) / 100,
+          ]),
+        );
+        return { ...registro, proyecciones, probabilidad: nueva };
+      }),
+    );
+  },
+
+  /** Edita la nota comercial de un registro. */
+  actualizarComentario(id: string, comentario: string): void {
+    establecer(
+      estado.map((registro) =>
+        registro.id === id ? { ...registro, comentario: comentario.trim() || undefined } : registro,
+      ),
     );
   },
 

@@ -1,17 +1,18 @@
 "use client";
 
 import { Download } from "lucide-react";
+import { useState } from "react";
 
-import { ANIO_PRONOSTICO } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+
 import {
-  etiquetaPeriodo,
   formatearNumero,
-  mesesHasta,
   resumenPorCampo,
   resumirPeriodo,
   totalesPorUnidad,
   type FilaResumen,
 } from "@/lib/mrp-utils";
+import { etiquetaRango } from "@/lib/periodos";
 import type { CampoTextoMRP, MesKey, RegistroMRP } from "@/lib/types";
 
 import { EstadoPastilla } from "./Semaforo";
@@ -23,7 +24,7 @@ interface PropsReporte {
   onCerrar: () => void;
   /** Vista actual (ya filtrada). */
   registros: RegistroMRP[];
-  hasta: MesKey;
+  meses: MesKey[];
   onExportar: () => void;
 }
 
@@ -67,18 +68,21 @@ function TablaGrupo({ titulo, filas }: { titulo: string; filas: FilaResumen[] })
 }
 
 /** Reporte rápido: cumplimiento por vendedor, producto y unidad de medida. */
-export function ReportModal({ abierto, onCerrar, registros, hasta, onExportar }: PropsReporte) {
-  const meses = mesesHasta(hasta);
-  const resumen = resumirPeriodo(registros, meses);
-  const agrupar = (campo: CampoTextoMRP) => resumenPorCampo(registros, campo, meses);
+export function ReportModal({ abierto, onCerrar, registros, meses, onExportar }: PropsReporte) {
+  const [unidadElegida, setUnidadElegida] = useState<string | null>(null);
   const unidades = totalesPorUnidad(registros, meses);
+  // Nunca se suman unidades distintas: el reporte se calcula por UM (por defecto, la de mayor demanda).
+  const unidad = unidades.some((u) => u.unidad === unidadElegida) ? unidadElegida : (unidades[0]?.unidad ?? null);
+  const vista = unidades.length > 1 ? registros.filter((r) => r.unidadMedida === unidad) : registros;
+  const resumen = resumirPeriodo(vista, meses);
+  const agrupar = (campo: CampoTextoMRP) => resumenPorCampo(vista, campo, meses);
 
   return (
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
       titulo="Reporte rápido"
-      descripcion={`Periodo ${etiquetaPeriodo(hasta, ANIO_PRONOSTICO)} · calculado sobre la vista actual (con los filtros aplicados).`}
+      descripcion={`Periodo ${etiquetaRango(meses)} · calculado sobre la vista actual (con los filtros aplicados).`}
       tamano="lg"
       pie={
         <>
@@ -92,11 +96,35 @@ export function ReportModal({ abierto, onCerrar, registros, hasta, onExportar }:
       }
     >
       <div className="flex flex-col gap-6">
+        {unidades.length > 1 ? (
+          <div role="radiogroup" aria-label="Unidad de medida" className="flex flex-wrap items-center gap-2">
+            <span className="rotulo text-ink-2">Unidad</span>
+            {unidades.map((fila) => (
+              <button
+                key={fila.unidad}
+                type="button"
+                role="radio"
+                aria-checked={fila.unidad === unidad}
+                onClick={() => setUnidadElegida(fila.unidad)}
+                className={cn(
+                  "rounded-[5px] border px-3 py-1.5 text-sm transition-colors",
+                  fila.unidad === unidad
+                    ? "border-accent bg-accent-soft font-semibold text-accent"
+                    : "border-line-strong text-ink-2 hover:bg-surface-2",
+                )}
+              >
+                {fila.unidad} <span className="num text-xs text-ink-3">· {fila.registros} reg.</span>
+              </button>
+            ))}
+            <span className="text-xs text-ink-3">No se suman unidades distintas.</span>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { etiqueta: "Registros", valor: String(registros.length) },
-            { etiqueta: "Total demanda", valor: formatearNumero(resumen.demanda) },
-            { etiqueta: "Real + avance", valor: resumen.ratio === null ? "–" : formatearNumero(resumen.real) },
+            { etiqueta: "Registros", valor: String(vista.length) },
+            { etiqueta: "Total demanda", valor: `${formatearNumero(resumen.demanda)}${unidad ? ` ${unidad}` : ""}` },
+            { etiqueta: "Real + avance", valor: resumen.ratio === null ? "–" : `${formatearNumero(resumen.real)}${unidad ? ` ${unidad}` : ""}` },
           ].map((kpi) => (
             <div key={kpi.etiqueta} className="rounded-md border border-line bg-surface-2/60 p-3">
               <p className="rotulo text-ink-2">{kpi.etiqueta}</p>
@@ -114,18 +142,6 @@ export function ReportModal({ abierto, onCerrar, registros, hasta, onExportar }:
         <TablaGrupo titulo="Por vendedor" filas={agrupar("propietario")} />
         <TablaGrupo titulo="Por producto" filas={agrupar("detalleProducto")} />
 
-        <section>
-          <h3 className="rotulo mb-2 text-ink-2">Por unidad de medida</h3>
-          <div className="flex flex-wrap gap-2">
-            {unidades.map((fila) => (
-              <div key={fila.unidad} className="rounded-md border border-line px-3 py-2 text-sm">
-                <span className="font-semibold">{fila.unidad}</span>
-                <span className="num ml-2 text-ink-2">{formatearNumero(fila.demanda)}</span>
-                <span className="ml-1.5 text-xs text-ink-3">· {fila.registros} reg.</span>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
     </Modal>
   );

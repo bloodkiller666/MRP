@@ -1,4 +1,5 @@
-import type { CantidadesMes, RegistroMRP } from "./types";
+import { migrarCantidades } from "./periodos";
+import type { RegistroMRP } from "./types";
 
 /**
  * Datos iniciales de la aplicación.
@@ -21,7 +22,7 @@ type Fila = [
   unidadMedida: string,
 ];
 
-function r(n: number, fila: Fila, proyecciones: CantidadesMes): RegistroMRP {
+function r(n: number, fila: Fila, proyecciones: Record<string, number>): RegistroMRP {
   const [propietario, departamento, cuenta, proyecto, detalleProducto, grupoLinea, refineria, unidadMedida] = fila;
   return {
     id: `base-${n}`,
@@ -34,7 +35,7 @@ function r(n: number, fila: Fila, proyecciones: CantidadesMes): RegistroMRP {
     refineria,
     unidadMedida,
     tipoAplicacion: "",
-    proyecciones,
+    proyecciones: migrarCantidades(proyecciones),
     reales: {},
   };
 }

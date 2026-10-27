@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox } from "lucide-react";
+import { ClipboardPenLine, Inbox } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
@@ -13,18 +13,17 @@ import {
   YAxis,
 } from "recharts";
 
-import { ANIO_PRONOSTICO, ETIQUETAS_ESTADO, MESES, UMBRAL_AMARILLO, UMBRAL_VERDE } from "@/lib/constants";
+import { ETIQUETAS_ESTADO, UMBRAL_AMARILLO, UMBRAL_VERDE } from "@/lib/constants";
 import {
-  etiquetaPeriodo,
   formatearCompacto,
   formatearNumero,
   formatearPorcentaje,
-  mesesHasta,
   resumenPorCampo,
   resumirPeriodo,
   totalDemanda,
   totalesPorUnidad,
 } from "@/lib/mrp-utils";
+import { etiquetaMes, etiquetaRango, nombreMes } from "@/lib/periodos";
 import type { EstadoCumplimiento, MesKey, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -33,14 +32,20 @@ import { ESTILOS_ESTADO, EstadoPastilla } from "./Semaforo";
 interface DashboardProps {
   /** Registros ya filtrados: los gráficos reflejan siempre la vista actual. */
   registros: RegistroMRP[];
-  hasta: MesKey;
+  /** Meses del periodo que se analizan (hasta el mes elegido). */
+  meses: MesKey[];
+  /** Abre la carga de pronóstico y real filtrada por ese vendedor. */
+  alCargarVendedor?: (vendedor: string) => void;
 }
 
-const COLOR_MES: Record<MesKey, string> = {
-  oct: "var(--viz-m1)",
-  nov: "var(--viz-m2)",
-  dic: "var(--viz-m3)",
-};
+/** Rampa ordinal de un solo tono: del mes más antiguo (claro) al más reciente (oscuro). */
+function colorMes(indice: number, total: number): string {
+  if (total <= 1) return "var(--viz-m2)";
+  const avance = indice / (total - 1);
+  return avance <= 0.5
+    ? `color-mix(in oklab, var(--viz-m1), var(--viz-m2) ${Math.round(avance * 200)}%)`
+    : `color-mix(in oklab, var(--viz-m2), var(--viz-m3) ${Math.round((avance - 0.5) * 200)}%)`;
+}
 
 const EJE = { fill: "var(--ink-2)", fontSize: 12 };
 
@@ -90,10 +95,8 @@ interface PropsTooltip {
 interface FilaVendedor {
   vendedor: string;
   corto: string;
-  oct: number;
-  nov: number;
-  dic: number;
   total: number;
+  porMes: Record<MesKey, number>;
 }
 
 /** Tooltip del gráfico apilado: vendedor, cada mes y el total. */
@@ -153,9 +156,11 @@ function TooltipSimple({
  * Se muestra **una unidad de medida a la vez** (GLN o KG): sumar galones con
  * kilos no tiene sentido, así que cada gráfico trabaja con una sola unidad.
  */
-export function Dashboard({ registros, hasta }: DashboardProps) {
-  const meses = useMemo(() => mesesHasta(hasta), [hasta]);
-  const mesesPeriodo = MESES.filter((mes) => meses.includes(mes.key));
+export function Dashboard({ registros, meses, alCargarVendedor }: DashboardProps) {
+  const mesesPeriodo = useMemo(
+    () => meses.map((mes, indice) => ({ key: mes, label: etiquetaMes(mes), nombre: nombreMes(mes), color: colorMes(indice, meses.length) })),
+    [meses],
+  );
 
   const unidades = useMemo(() => totalesPorUnidad(registros, meses), [registros, meses]);
   const [unidadElegida, setUnidadElegida] = useState("");
@@ -175,17 +180,18 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
       const fila = mapa.get(vendedor) ?? {
         vendedor,
         corto: nombreCorto(vendedor),
-        oct: 0,
-        nov: 0,
-        dic: 0,
         total: 0,
+        porMes: Object.fromEntries(meses.map((mes) => [mes, 0])),
       };
-      for (const mes of meses) fila[mes] += registro.proyecciones[mes] ?? 0;
-      fila.total = meses.reduce((acc, mes) => acc + fila[mes], 0);
+      for (const mes of meses) fila.porMes[mes] += registro.proyecciones[mes] ?? 0;
+      fila.total = meses.reduce((acc, mes) => acc + fila.porMes[mes], 0);
       mapa.set(vendedor, fila);
     }
     return [...mapa.values()].filter((f) => f.total > 0).sort((a, b) => b.total - a.total);
   }, [enUnidad, meses]);
+
+  /** Una fila por vendedor con cada mes como propiedad propia (lo que recharts necesita). */
+  const datosGrafico = useMemo(() => filasVendedor.map((fila) => ({ ...fila, ...fila.porMes })), [filasVendedor]);
 
   const cumplimientoVendedor = useMemo(
     () => resumenPorCampo(enUnidad, "propietario", meses).filter((f) => f.demanda > 0),
@@ -233,7 +239,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-ink">
-              Estado de la cartera · {etiquetaPeriodo(hasta, ANIO_PRONOSTICO)}
+              Estado de la cartera · {etiquetaRango(meses)}
             </h3>
             <p className="mt-0.5 text-xs text-ink-3">
               {enUnidad.length} registros en {unidad || "—"}. Cada unidad de medida se analiza por separado.
@@ -306,21 +312,28 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
           descripcion={`Pronóstico ${unidad} acumulado del periodo, desglosado por mes.`}
           className="xl:col-span-3"
           acciones={
-            <ul className="flex items-center gap-3 text-xs text-ink-2" aria-label="Leyenda de meses">
+            <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2" aria-label="Leyenda de meses">
               {mesesPeriodo.map((mes) => (
                 <li key={mes.key} className="flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-[2px]" style={{ background: COLOR_MES[mes.key] }} />
+                  <span className="size-2.5 rounded-[2px]" style={{ background: mes.color }} />
                   {mes.nombre}
                 </li>
               ))}
             </ul>
           }
         >
+          {filasVendedor.length === 0 ? (
+            <div className="flex h-full min-h-40 flex-col items-center justify-center gap-1 text-center">
+              <Inbox className="size-7 text-line-strong" />
+              <p className="text-sm font-medium text-ink">Sin pronóstico en este periodo</p>
+              <p className="text-xs text-ink-3">Carga el pronóstico en la tabla o importa un Excel con los meses del periodo.</p>
+            </div>
+          ) : (
           <div className="flex h-full flex-col">
           <div className="flex-1" style={{ minHeight: Math.max(filasVendedor.length * 40 + 36, 160) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={filasVendedor}
+                data={datosGrafico}
                 layout="vertical"
                 margin={{ top: 0, right: 64, bottom: 0, left: 0 }}
                 barCategoryGap={10}
@@ -351,7 +364,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
                     dataKey={mes.key}
                     name={mes.nombre}
                     stackId="demanda"
-                    fill={COLOR_MES[mes.key]}
+                    fill={mes.color}
                     stroke="var(--surface)"
                     strokeWidth={2}
                     maxBarSize={22}
@@ -395,7 +408,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
                       <td className="px-3 py-1.5">{fila.vendedor}</td>
                       {mesesPeriodo.map((mes) => (
                         <td key={mes.key} className="num px-3 py-1.5 text-right">
-                          {formatearNumero(fila[mes.key])}
+                          {formatearNumero(fila.porMes[mes.key])}
                         </td>
                       ))}
                       <td className="num px-3 py-1.5 text-right font-semibold">{formatearNumero(fila.total)}</td>
@@ -406,6 +419,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
             </div>
           </details>
           </div>
+          )}
         </Panel>
 
         <Panel
@@ -422,7 +436,20 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
                     <p className="min-w-0 truncate text-[13px] font-medium text-ink" title={fila.etiqueta}>
                       {nombreCorto(fila.etiqueta)}
                     </p>
-                    <EstadoPastilla estado={fila.estado} ratio={fila.ratio} />
+                    <span className="flex shrink-0 items-center gap-2">
+                      {alCargarVendedor && fila.etiqueta !== "(sin dato)" ? (
+                        <button
+                          type="button"
+                          onClick={() => alCargarVendedor(fila.etiqueta)}
+                          title={`Cargar pronóstico y real de ${fila.etiqueta}`}
+                          className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent-soft"
+                        >
+                          <ClipboardPenLine className="size-3.5" />
+                          Cargar
+                        </button>
+                      ) : null}
+                      <EstadoPastilla estado={fila.estado} ratio={fila.ratio} />
+                    </span>
                   </div>
                   <div
                     className="relative mt-1.5 h-2 w-full rounded-full"
@@ -454,7 +481,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
           </ul>
           <p className="mt-4 border-t border-line pt-3 text-[11px] text-ink-3">
             Marcas en {UMBRAL_AMARILLO * 100}% y {UMBRAL_VERDE * 100}%.{" "}
-            {hayReal ? "" : "Carga el real en la tabla (columna «Real») para ver el avance."}
+            {hayReal ? "" : "Carga el real en la pestaña «Cargar real» para ver el avance."}
           </p>
         </Panel>
       </div>

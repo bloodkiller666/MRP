@@ -1,12 +1,13 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 
-import { ETIQUETAS_CAMPO, MESES } from "@/lib/constants";
+import { ETIQUETAS_CAMPO } from "@/lib/constants";
 import { EXTENSIONES_ACEPTADAS, parsearArchivoMRP } from "@/lib/excel";
 import { formatearNumero } from "@/lib/mrp-utils";
-import type { CampoDestino, CampoTextoMRP, RegistroMRP, ResultadoImportacion } from "@/lib/types";
+import { etiquetaMesAnio, ordenarMeses } from "@/lib/periodos";
+import type { CampoDestino, CampoTextoMRP, MesKey, RegistroMRP, ResultadoImportacion } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { Boton } from "./ui/Boton";
@@ -15,32 +16,35 @@ import { Modal } from "./ui/Modal";
 interface PropsModalImportacion {
   abierto: boolean;
   onCerrar: () => void;
-  /** Anexa los registros al estado existente (nunca reemplaza). */
+  /** Combina los registros con la tabla: actualiza los que ya existen y anexa los nuevos. */
   onImportar: (registros: RegistroMRP[]) => void;
+  /** Meses del periodo activo: sirven para ubicar el año de los meses escritos sin año («Oct»). */
+  mesesPeriodo: MesKey[];
 }
 
 /** Nombre legible del destino de una columna (campo, pronóstico de un mes o real de un mes). */
 function etiquetaDestino(campo: CampoDestino): string {
-  if (campo.startsWith("real_")) {
-    const mes = MESES.find((item) => item.key === campo.slice(5));
-    return `Real ${mes?.label ?? campo}`;
-  }
-  const mes = MESES.find((item) => item.key === campo);
-  if (mes) return `Pronóstico ${mes.label}`;
+  if (campo.startsWith("real_")) return `Real ${etiquetaMesAnio(campo.slice(5))}`;
+  if (campo.startsWith("pron_")) return `Pronóstico ${etiquetaMesAnio(campo.slice(5))}`;
+  if (campo === "probabilidad") return "Probabilidad (PROB)";
+  if (campo === "comentario") return "Comentario";
   return ETIQUETAS_CAMPO[campo as CampoTextoMRP];
 }
 
 /** Modal de importación: lee `.xlsx`/`.xls`/`.csv` y previsualiza antes de anexar. */
-export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalImportacion) {
+export function ExcelImportModal({ abierto, onCerrar, onImportar, mesesPeriodo }: PropsModalImportacion) {
   const [resultado, setResultado] = useState<ResultadoImportacion | null>(null);
   const [nombreArchivo, setNombreArchivo] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
+  /** Meses marcados por el usuario; `null` = la selección por defecto. */
+  const [mesesElegidos, setMesesElegidos] = useState<MesKey[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const reiniciar = () => {
     setResultado(null);
+    setMesesElegidos(null);
     setNombreArchivo("");
     setError(null);
     setCargando(false);
@@ -59,9 +63,10 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
     setError(null);
     setResultado(null);
     setNombreArchivo(archivo.name);
+    setMesesElegidos(null);
 
     try {
-      setResultado(await parsearArchivoMRP(archivo));
+      setResultado(await parsearArchivoMRP(archivo, mesesPeriodo));
     } catch (excepcion) {
       setError(excepcion instanceof Error ? excepcion.message : "No se pudo leer el archivo.");
     } finally {
@@ -71,9 +76,54 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
 
   const confirmar = () => {
     if (!resultado) return;
-    onImportar(resultado.registros);
+    onImportar(registrosAImportar);
     cerrar();
   };
+
+  /** Meses que trae el archivo (con pronóstico o con real), para la previsualización. */
+  const mesesArchivo = useMemo(() => {
+    const encontrados = new Set<MesKey>();
+    for (const registro of resultado?.registros ?? []) {
+      for (const mes of Object.keys(registro.proyecciones)) encontrados.add(mes);
+      for (const mes of Object.keys(registro.reales)) encontrados.add(mes);
+    }
+    return ordenarMeses(encontrados);
+  }, [resultado]);
+  /**
+   * Por defecto se importan los meses desde el inicio del periodo activo en adelante
+   * (p. ej. Oct–Dic 2026 y 2027); el histórico anterior queda sin marcar.
+   */
+  const mesesPorDefecto = useMemo(
+    () => mesesArchivo.filter((mes) => mes >= (mesesPeriodo[0] ?? "")),
+    [mesesArchivo, mesesPeriodo],
+  );
+  const mesesActivos = mesesElegidos ?? mesesPorDefecto;
+
+  const alternarMes = (mes: MesKey) =>
+    setMesesElegidos((previos) => {
+      const base = previos ?? mesesPorDefecto;
+      return base.includes(mes) ? base.filter((m) => m !== mes) : [...base, mes];
+    });
+
+  /** Registros reducidos a los meses marcados; se omiten los que solo tenían datos en otros meses. */
+  const registrosAImportar = (() => {
+    const activos = new Set(mesesActivos);
+    const reducir = (cantidades: RegistroMRP["proyecciones"]) =>
+      Object.fromEntries(Object.entries(cantidades).filter(([mes]) => activos.has(mes)));
+    const lista: RegistroMRP[] = [];
+    for (const registro of resultado?.registros ?? []) {
+      const proyecciones = reducir(registro.proyecciones);
+      const reales = reducir(registro.reales);
+      const teniaDatos = Object.keys(registro.proyecciones).length + Object.keys(registro.reales).length > 0;
+      const quedanDatos = Object.keys(proyecciones).length + Object.keys(reales).length > 0;
+      if (teniaDatos && !quedanDatos) continue;
+      lista.push({ ...registro, proyecciones, reales });
+    }
+    return lista;
+  })();
+
+  const mesesPrevia = mesesActivos.length > 0 ? ordenarMeses(mesesActivos).slice(0, 6) : mesesArchivo.slice(0, 6);
+  const traeReal = registrosAImportar.some((registro) => Object.keys(registro.reales).length > 0);
 
   const activas = resultado?.mapeo.filter((columna) => columna.campo && !columna.duplicada) ?? [];
 
@@ -82,7 +132,7 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
       abierto={abierto}
       onCerrar={cerrar}
       titulo="Importar Excel"
-      descripcion="Los registros se anexan al final de la tabla: nunca se sobrescriben ni se borran datos previos."
+      descripcion="Si una fila ya existe (mismo vendedor, cliente, producto y UM) se completan sus meses de pronóstico y real; si es nueva, se anexa. No se borra nada."
       tamano="lg"
       pie={
         <>
@@ -90,8 +140,13 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
             Cancelar
           </Boton>
           {resultado ? (
-            <Boton variante="primario" onClick={confirmar} icono={<CheckCircle2 className="size-4" />}>
-              Anexar {resultado.registros.length} registro{resultado.registros.length === 1 ? "" : "s"}
+            <Boton
+              variante="primario"
+              onClick={confirmar}
+              disabled={registrosAImportar.length === 0}
+              icono={<CheckCircle2 className="size-4" />}
+            >
+              Importar {registrosAImportar.length} registro{registrosAImportar.length === 1 ? "" : "s"}
             </Boton>
           ) : null}
         </>
@@ -161,7 +216,7 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
             <div className="flex items-start gap-2 rounded-md border border-ok-line bg-ok-soft px-3 py-2 text-sm text-ok">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
               <div>
-                <p className="font-medium">{resultado.registros.length} registros listos para anexar</p>
+                <p className="font-medium">{registrosAImportar.length} registros listos para importar</p>
                 <p className="text-xs">
                   Hoja <span className="font-medium">{resultado.nombreHoja}</span>
                   {resultado.filasOmitidas > 0
@@ -177,6 +232,36 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
                   <li key={advertencia}>• {advertencia}</li>
                 ))}
               </ul>
+            ) : null}
+
+            {mesesArchivo.length > 0 ? (
+              <div>
+                <h3 className="rotulo mb-2 text-ink-2">Meses a importar</h3>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Meses a importar">
+                  {mesesArchivo.map((mes) => {
+                    const marcado = mesesActivos.includes(mes);
+                    return (
+                      <button
+                        key={mes}
+                        type="button"
+                        aria-pressed={marcado}
+                        onClick={() => alternarMes(mes)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                          marcado
+                            ? "border-accent bg-accent-soft text-accent"
+                            : "border-line-strong text-ink-3 hover:bg-surface-2",
+                        )}
+                      >
+                        {etiquetaMesAnio(mes)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-ink-3">
+                  Se marcan por defecto los meses desde el inicio del periodo activo. Marca otros para cargar histórico.
+                </p>
+              </div>
             ) : null}
 
             <div>
@@ -205,7 +290,9 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
 
             <div>
               <h3 className="rotulo mb-2 text-ink-2">
-                Previsualización (primeras {Math.min(5, resultado.registros.length)} filas)
+                Previsualización (primeras {Math.min(5, registrosAImportar.length)} filas
+                {mesesArchivo.length > mesesPrevia.length ? `, ${mesesPrevia.length} de ${mesesArchivo.length} meses` : ""}
+                {traeReal ? " · cada mes: pronóstico | real" : ""})
               </h3>
               <div className="overflow-x-auto rounded-md border border-line">
                 <table className="w-full min-w-max text-xs">
@@ -215,24 +302,29 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar }: PropsModalIm
                       <th className="rotulo px-2.5 py-1.5 text-ink-2">Cliente</th>
                       <th className="rotulo px-2.5 py-1.5 text-ink-2">Detalle producto</th>
                       <th className="rotulo px-2.5 py-1.5 text-ink-2">UM</th>
-                      {MESES.map((mes) => (
-                        <th key={mes.key} className="rotulo px-2.5 py-1.5 text-right text-ink-2">
-                          Pron. {mes.label}
+                      {mesesPrevia.map((mes) => (
+                        <th key={mes} className="rotulo px-2.5 py-1.5 text-right text-ink-2" colSpan={traeReal ? 2 : 1}>
+                          {etiquetaMesAnio(mes)}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {resultado.registros.slice(0, 5).map((registro) => (
+                    {registrosAImportar.slice(0, 5).map((registro) => (
                       <tr key={registro.id} className="border-t border-line">
                         <td className="px-2.5 py-1.5">{registro.propietario || "—"}</td>
                         <td className="max-w-[14rem] truncate px-2.5 py-1.5">{registro.cuenta || "—"}</td>
                         <td className="px-2.5 py-1.5">{registro.detalleProducto || "—"}</td>
                         <td className="px-2.5 py-1.5">{registro.unidadMedida || "—"}</td>
-                        {MESES.map((mes) => (
-                          <td key={mes.key} className="num px-2.5 py-1.5 text-right">
-                            {formatearNumero(registro.proyecciones[mes.key])}
-                          </td>
+                        {mesesPrevia.map((mes) => (
+                          <Fragment key={mes}>
+                            <td className="num px-2.5 py-1.5 text-right">{formatearNumero(registro.proyecciones[mes])}</td>
+                            {traeReal ? (
+                              <td className="num px-2.5 py-1.5 text-right text-accent">
+                                {formatearNumero(registro.reales[mes])}
+                              </td>
+                            ) : null}
+                          </Fragment>
                         ))}
                       </tr>
                     ))}

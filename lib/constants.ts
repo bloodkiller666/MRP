@@ -4,18 +4,7 @@ import type {
   ColumnaTabla,
   EstadoCumplimiento,
   FiltrosMRP,
-  MesKey,
 } from "./types";
-
-/** Meses del horizonte de pronóstico, en el orden en que se muestran. */
-export const MESES: ReadonlyArray<{ key: MesKey; label: string; nombre: string }> = [
-  { key: "oct", label: "Oct", nombre: "Octubre" },
-  { key: "nov", label: "Nov", nombre: "Noviembre" },
-  { key: "dic", label: "Dic", nombre: "Diciembre" },
-];
-
-/** Año del pronóstico (se muestra en rótulos). */
-export const ANIO_PRONOSTICO = 2026;
 
 /** Etiquetas legibles de cada campo de texto del registro. */
 export const ETIQUETAS_CAMPO: Record<CampoTextoMRP, string> = {
@@ -194,6 +183,7 @@ export const STORAGE_KEY = "mrp:registros:v2";
 export const CATALOGO_STORAGE_KEY = "mrp:catalogo:v2";
 export const TEMA_STORAGE_KEY = "mrp:tema";
 export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v2";
+export const PERIODOS_STORAGE_KEY = "mrp:periodos:v1";
 
 /** Leyenda mostrada en el pie de la tabla y en las exportaciones. */
 export const ETIQUETA_TOTAL = "TOTAL";

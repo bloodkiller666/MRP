@@ -1,4 +1,4 @@
-import { CAMPOS_TEXTO, ETIQUETAS_CAMPO, MESES, UMBRAL_AMARILLO, UMBRAL_VERDE } from "./constants";
+import { CAMPOS_TEXTO, ETIQUETAS_CAMPO, UMBRAL_AMARILLO, UMBRAL_VERDE } from "./constants";
 import type {
   CampoTextoMRP,
   Cumplimiento,
@@ -16,12 +16,16 @@ export function etiquetaCampo(campo: CampoTextoMRP): string {
 
 /** Formateadores únicos de números para tabla, tarjetas y reportes. */
 const formateador = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 0 });
+const formateadorUnDecimal = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 1 });
 const formateadorDecimal = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 2 });
 
-/** Formatea una cantidad entera; devuelve "–" para valores vacíos. */
+/**
+ * Formatea una cantidad; devuelve "–" para valores vacíos. Enteros salvo por debajo de 100,
+ * donde conserva un decimal (las toneladas de un cliente pequeño no deben redondearse a 0).
+ */
 export function formatearNumero(valor: number | null | undefined): string {
   if (valor === null || valor === undefined || Number.isNaN(valor)) return "–";
-  return formateador.format(valor);
+  return Math.abs(valor) < 100 ? formateadorUnDecimal.format(valor) : formateador.format(valor);
 }
 
 /** Igual que {@link formatearNumero} pero conserva hasta 2 decimales (celdas editables). */
@@ -50,19 +54,15 @@ export function formatearCompacto(valor: number): string {
 /*  Periodo (Oct → mes elegido)                                                */
 /* -------------------------------------------------------------------------- */
 
-/** Meses del periodo: desde octubre hasta el mes elegido, inclusive. */
-export function mesesHasta(hasta: MesKey): MesKey[] {
-  const indice = MESES.findIndex((mes) => mes.key === hasta);
-  return MESES.slice(0, indice + 1).map((mes) => mes.key);
+/** Meses del periodo hasta el mes elegido, inclusive. Si `hasta` no está en el periodo, se usa todo. */
+export function mesesHasta(mesesPeriodo: MesKey[], hasta: MesKey): MesKey[] {
+  const indice = mesesPeriodo.indexOf(hasta);
+  return indice < 0 ? mesesPeriodo : mesesPeriodo.slice(0, indice + 1);
 }
 
-/** Etiqueta del periodo, ej. «Oct – Dic 2026». */
-export function etiquetaPeriodo(hasta: MesKey, anio: number): string {
-  const meses = mesesHasta(hasta);
-  const etiqueta = (clave: MesKey) => MESES.find((mes) => mes.key === clave)?.label ?? clave;
-  return meses.length === 1
-    ? `${etiqueta(meses[0])} ${anio}`
-    : `${etiqueta(meses[0])} – ${etiqueta(meses[meses.length - 1])} ${anio}`;
+/** `true` si el registro tiene pronóstico o real cargado en alguno de los meses. */
+export function tieneDatosEnMeses(registro: RegistroMRP, meses: MesKey[]): boolean {
+  return meses.some((mes) => registro.proyecciones[mes] !== undefined || registro.reales[mes] !== undefined);
 }
 
 /** Suma de las cantidades definidas de un registro en los meses indicados. */
@@ -112,7 +112,7 @@ export interface ResumenPeriodo {
   ratio: number | null;
   estado: EstadoCumplimiento;
   porEstado: Record<EstadoCumplimiento, number>;
-  /** Demanda y real por mes (todo el horizonte, para gráficos). */
+  /** Demanda y real por cada mes del periodo (para gráficos y pie de tabla). */
   porMes: Record<MesKey, { demanda: number; real: number; conReal: boolean }>;
 }
 
@@ -148,11 +148,11 @@ export function resumirPeriodo(registros: RegistroMRP[], meses: MesKey[]): Resum
   const ratio = demandaConReal > 0 ? realConReal / demandaConReal : null;
 
   const porMes = {} as ResumenPeriodo["porMes"];
-  for (const mes of MESES) {
-    porMes[mes.key] = {
-      demanda: registros.reduce((acc, r) => acc + (r.proyecciones[mes.key] ?? 0), 0),
-      real: registros.reduce((acc, r) => acc + (r.reales[mes.key] ?? 0), 0),
-      conReal: registros.some((r) => r.reales[mes.key] !== undefined),
+  for (const mes of meses) {
+    porMes[mes] = {
+      demanda: registros.reduce((acc, r) => acc + (r.proyecciones[mes] ?? 0), 0),
+      real: registros.reduce((acc, r) => acc + (r.reales[mes] ?? 0), 0),
+      conReal: registros.some((r) => r.reales[mes] !== undefined),
     };
   }
 
@@ -232,6 +232,23 @@ export function totalesPorUnidad(
   return [...mapa.entries()]
     .map(([unidad, valores]) => ({ unidad, ...valores }))
     .sort((a, b) => b.demanda - a.demanda);
+}
+
+/** Resumen completo del periodo para cada unidad de medida (de mayor a menor demanda). */
+export function resumenPorUnidad(
+  registros: RegistroMRP[],
+  meses: MesKey[],
+): Array<{ unidad: string; registros: number; resumen: ResumenPeriodo }> {
+  const grupos = new Map<string, RegistroMRP[]>();
+  for (const registro of registros) {
+    const unidad = registro.unidadMedida.trim() || "s/UM";
+    const lista = grupos.get(unidad);
+    if (lista) lista.push(registro);
+    else grupos.set(unidad, [registro]);
+  }
+  return [...grupos.entries()]
+    .map(([unidad, lista]) => ({ unidad, registros: lista.length, resumen: resumirPeriodo(lista, meses) }))
+    .sort((a, b) => b.resumen.demanda - a.resumen.demanda);
 }
 
 /* -------------------------------------------------------------------------- */

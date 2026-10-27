@@ -1,9 +1,16 @@
-import { CAMPOS_TEXTO, ETIQUETA_TOTAL, ETIQUETAS_CAMPO, ETIQUETAS_ESTADO, MESES } from "./constants";
-import { cumplimientoRegistro, mesesHasta, resumirPeriodo, resumenPorCampo } from "./mrp-utils";
+import { CAMPOS_TEXTO, ETIQUETA_TOTAL, ETIQUETAS_CAMPO, ETIQUETAS_ESTADO } from "./constants";
+import { cumplimientoRegistro, resumirPeriodo, resumenPorCampo } from "./mrp-utils";
+import {
+  ALIAS_MES,
+  claveMes,
+  etiquetaMesAnio,
+  mesesDesde,
+  PERIODO_INICIAL,
+  resolverMesSinAnio,
+} from "./periodos";
 import type {
   CampoDestino,
   CampoTextoMRP,
-  ClaveReal,
   MapeoColumna,
   MesKey,
   RegistroMRP,
@@ -23,7 +30,7 @@ import { generarId, normalizarClave, normalizarTexto, parsearNumero } from "./ut
 /* -------------------------------------------------------------------------- */
 
 /** Alias aceptados por campo de texto, comparados sin espacios ni acentos. */
-const ALIAS_CAMPOS: Record<string, CampoTextoMRP> = {
+const ALIAS_CAMPOS: Record<string, CampoTextoMRP | "probabilidad" | "comentario"> = {
   propietario: "propietario",
   owner: "propietario",
   representante: "propietario",
@@ -59,17 +66,28 @@ const ALIAS_CAMPOS: Record<string, CampoTextoMRP> = {
   unidadmedida: "unidadMedida",
   unidadmed: "unidadMedida",
   uom: "unidadMedida",
+  probabilidad: "probabilidad",
+  prob: "probabilidad",
+  comentario: "comentario",
+  comentarios: "comentario",
+  observacion: "comentario",
+  observaciones: "comentario",
   tipoaplicacion: "tipoAplicacion",
   aplicacion: "tipoAplicacion",
   tipodeaplicacion: "tipoAplicacion",
 };
 
-/** Alias por mes, comparados sin espacios ni acentos. */
-const ALIAS_MESES: Record<MesKey, string[]> = {
-  oct: ["oct", "octubre", "october"],
-  nov: ["nov", "noviembre", "november"],
-  dic: ["dic", "diciembre", "dec", "december"],
-};
+/** Decide a qué mes (`AAAA-MM`) corresponde un mes escrito sin año («Oct»). */
+export type ResolverMes = (indiceMes: number, anioExplicito?: number) => MesKey;
+
+/** Por defecto: el mes cae en el periodo inicial (Oct–Dic 2026) o, si no, en su año. */
+const resolverPorDefecto: ResolverMes = (indice, anio) =>
+  anio ? claveMes(anio, indice) : resolverMesSinAnio(indice, mesesDesde(PERIODO_INICIAL.desde, PERIODO_INICIAL.cantidad));
+
+/** Crea un resolvedor para los meses sin año a partir de los meses del periodo activo. */
+export function resolvedorParaPeriodo(mesesPeriodo: MesKey[]): ResolverMes {
+  return (indice, anio) => (anio ? claveMes(anio, indice) : resolverMesSinAnio(indice, mesesPeriodo));
+}
 
 /** Prefijos que suelen acompañar al mes en las columnas de pronóstico. */
 const PREFIJOS_PRONOSTICO = /^(proyeccion|proy|pronostico|pron|demanda|consumo|requerimiento|req|mes)/;
@@ -85,28 +103,33 @@ const PREFIJOS_REAL = /^(real|avance|despacho|despachado|ejecutado)/;
 const FILA_TOTALES = /^(total|totales|subtotal|gran total)$/;
 
 /** Devuelve el mes al que corresponde un texto ya limpio de prefijos, o `null`. */
-function buscarMes(clave: string): MesKey | null {
-  for (const mes of MESES) {
-    for (const alias of ALIAS_MESES[mes.key]) {
+function buscarMes(clave: string, resolver: ResolverMes): MesKey | null {
+  for (let indice = 0; indice < ALIAS_MES.length; indice++) {
+    for (const alias of ALIAS_MES[indice]) {
       // Coincidencia exacta o con sufijo de año (oct26 / octubre2026).
-      if (new RegExp(`^${alias}(\\d{2}|\\d{4})?$`).test(clave)) return mes.key;
+      const coincidencia = new RegExp(`^${alias}(\\d{2}|\\d{4})?$`).exec(clave);
+      if (!coincidencia) continue;
+      const anioTexto = coincidencia[1];
+      const anio = anioTexto ? (anioTexto.length === 2 ? 2000 + Number(anioTexto) : Number(anioTexto)) : undefined;
+      return resolver(indice, anio);
     }
   }
   return null;
 }
 
 /** Asocia un encabezado crudo del archivo a un campo del sistema. */
-export function mapearEncabezado(encabezado: string): CampoDestino | null {
+export function mapearEncabezado(encabezado: string, resolver: ResolverMes = resolverPorDefecto): CampoDestino | null {
   const clave = normalizarClave(encabezado);
   if (!clave) return null;
   if (ALIAS_CAMPOS[clave]) return ALIAS_CAMPOS[clave];
 
   if (PREFIJOS_REAL.test(clave)) {
-    const mes = buscarMes(clave.replace(PREFIJOS_REAL, ""));
-    return mes ? (`real_${mes}` as ClaveReal) : null;
+    const mes = buscarMes(clave.replace(PREFIJOS_REAL, ""), resolver);
+    return mes ? `real_${mes}` : null;
   }
 
-  return buscarMes(clave.replace(PREFIJOS_PRONOSTICO, "") || clave);
+  const mes = buscarMes(clave.replace(PREFIJOS_PRONOSTICO, "") || clave, resolver);
+  return mes ? `pron_${mes}` : null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -125,14 +148,19 @@ function contarReconocidas(fila: unknown[]): number {
   return fila.filter((celda) => mapearEncabezado(String(celda ?? ""))).length;
 }
 
-/** Cantidad de campos **distintos** reconocidos: puntúa qué hoja encaja mejor con el modelo. */
+/**
+ * Puntúa qué hoja encaja mejor con el modelo: pesan primero los campos de texto distintos
+ * (propietario, cliente, producto, UM…) y, de desempate, la cantidad de meses reconocidos.
+ * Así una hoja resumen con muchos meses pero sin cliente ni producto no le gana a la base.
+ */
 function contarCamposDistintos(fila: unknown[]): number {
   const campos = new Set<CampoDestino>();
   for (const celda of fila) {
     const campo = mapearEncabezado(String(celda ?? ""));
     if (campo) campos.add(campo);
   }
-  return campos.size;
+  const texto = [...campos].filter((campo) => !campo.startsWith("pron_") && !campo.startsWith("real_")).length;
+  return texto * 100 + Math.min(campos.size - texto, 99);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -182,7 +210,10 @@ function detectarFilaEncabezado(filas: unknown[][]): number {
  * **No sobrescribe nada**: devuelve las filas nuevas para que el llamador las
  * anexe al estado existente.
  */
-export async function parsearArchivoMRP(archivo: File): Promise<ResultadoImportacion> {
+export async function parsearArchivoMRP(
+  archivo: File,
+  mesesPeriodo: MesKey[] = mesesDesde(PERIODO_INICIAL.desde, PERIODO_INICIAL.cantidad),
+): Promise<ResultadoImportacion> {
   const XLSX = await import("xlsx");
   const esCsv = /\.csv$/i.test(archivo.name);
 
@@ -205,7 +236,7 @@ export async function parsearArchivoMRP(archivo: File): Promise<ResultadoImporta
   }
 
   if (!mejor) throw new Error("El archivo no contiene hojas con datos.");
-  return mapearMatriz(mejor.matriz, mejor.nombre);
+  return mapearMatriz(mejor.matriz, mejor.nombre, resolvedorParaPeriodo(mesesPeriodo));
 }
 
 /**
@@ -215,7 +246,11 @@ export async function parsearArchivoMRP(archivo: File): Promise<ResultadoImporta
  * Si varias columnas apuntan al mismo destino (p. ej. dos bloques «Oct», uno por
  * año) se usa **la última**, que en los libros de planificación es la vigente.
  */
-export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): ResultadoImportacion {
+export function mapearMatriz(
+  matriz: unknown[][],
+  nombreHoja = "Hoja1",
+  resolver: ResolverMes = resolverPorDefecto,
+): ResultadoImportacion {
   if (matriz.length === 0) throw new Error("La hoja está vacía.");
 
   const indiceEncabezado = detectarFilaEncabezado(matriz);
@@ -224,7 +259,7 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
   const mapeo: MapeoColumna[] = encabezados.map((encabezadoOriginal, indice) => ({
     encabezadoOriginal: encabezadoOriginal || `Columna ${indice + 1}`,
     indice,
-    campo: mapearEncabezado(encabezadoOriginal),
+    campo: mapearEncabezado(encabezadoOriginal, resolver),
   }));
 
   // Si un destino aparece varias veces, solo la última columna queda activa.
@@ -261,7 +296,7 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
     advertencias.push("El archivo no trae «Tipo de aplicación»: quedará vacío para completarlo en la tabla.");
   }
   if (!activas.some((columna) => String(columna.campo).startsWith("real_"))) {
-    advertencias.push("El archivo no trae columnas de despacho real («Real Oct»…): el cumplimiento quedará «Sin real».");
+    advertencias.push("El archivo no trae columnas de despacho real («Real Oct»…): no se cargará real.");
   }
 
   const registros: RegistroMRP[] = [];
@@ -291,10 +326,19 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
 
       if (campo.startsWith("real_")) {
         const numero = parsearNumero(valor);
-        if (numero !== undefined) registro.reales[campo.slice(5) as MesKey] = numero;
-      } else if (campo === "oct" || campo === "nov" || campo === "dic") {
+        if (numero !== undefined) registro.reales[campo.slice(5)] = numero;
+      } else if (campo.startsWith("pron_")) {
         const numero = parsearNumero(valor);
-        if (numero !== undefined) registro.proyecciones[campo] = numero;
+        if (numero !== undefined) registro.proyecciones[campo.slice(5)] = numero;
+      } else if (campo === "probabilidad") {
+        const numero = parsearNumero(valor);
+        // El Excel la guarda como 0.4 o como 40 (%): ambas formas se aceptan.
+        if (numero !== undefined) {
+          const fraccion = numero > 1 ? numero / 100 : numero;
+          if (fraccion > 0 && fraccion <= 1) registro.probabilidad = fraccion;
+        }
+      } else if (campo === "comentario") {
+        registro.comentario = parsearTexto(valor) || undefined;
       } else {
         registro[campo as CampoTextoMRP] = parsearTexto(valor);
       }
@@ -319,7 +363,7 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
   if (registros.length === 0) {
     throw new Error(
       "No se encontraron filas válidas. Verifica que el archivo tenga los encabezados " +
-        "(Propietario, Cliente/Cuenta, Detalle Producto, Tipo de aplicación, UM, Oct, Nov, Dic).",
+        "(Propietario, Cliente/Cuenta, Detalle Producto, UM y al menos un mes: Oct, Nov, Ene 2027…).",
     );
   }
 
@@ -339,8 +383,8 @@ export function mapearMatriz(matriz: unknown[][], nombreHoja = "Hoja1"): Resulta
 
 export interface OpcionesExportacion {
   registros: RegistroMRP[];
-  /** Meses del periodo que se exporta (de Oct hasta el mes elegido). */
-  hasta?: MesKey;
+  /** Meses del periodo que se exporta (hasta el mes elegido). */
+  meses: MesKey[];
   /** Nombre del archivo sin extensión. Se agrega la fecha automáticamente. */
   nombreArchivo?: string;
   /** Incluye una hoja "Resumen" con el cumplimiento por vendedor y producto. */
@@ -351,10 +395,9 @@ export interface OpcionesExportacion {
 function construirHojaPrincipal(
   XLSX: typeof import("xlsx"),
   registros: RegistroMRP[],
-  hasta: MesKey,
+  meses: MesKey[],
 ) {
-  const meses = mesesHasta(hasta);
-  const etiquetaMes = (clave: MesKey) => MESES.find((mes) => mes.key === clave)?.label ?? clave;
+  const etiquetaMes = etiquetaMesAnio;
 
   const encabezados = [
     ...CAMPOS_TEXTO.map((campo) => ETIQUETAS_CAMPO[campo]),
@@ -364,6 +407,8 @@ function construirHojaPrincipal(
     "Real + avance",
     "Cumplimiento",
     "Semáforo",
+    "Probabilidad",
+    "Comentario",
   ];
 
   const filas = registros.map((registro) => {
@@ -380,6 +425,8 @@ function construirHojaPrincipal(
     fila["Real + avance"] = c.real;
     if (c.ratio !== null) fila["Cumplimiento"] = Number(c.ratio.toFixed(4));
     fila["Semáforo"] = ETIQUETAS_ESTADO[c.estado];
+    if (registro.probabilidad !== undefined) fila["Probabilidad"] = registro.probabilidad;
+    if (registro.comentario) fila["Comentario"] = registro.comentario;
     return fila;
   });
 
@@ -415,8 +462,7 @@ function construirHojaPrincipal(
 }
 
 /** Hoja de resumen: cumplimiento por vendedor, por producto y por unidad de medida. */
-function construirHojaResumen(XLSX: typeof import("xlsx"), registros: RegistroMRP[], hasta: MesKey) {
-  const meses = mesesHasta(hasta);
+function construirHojaResumen(XLSX: typeof import("xlsx"), registros: RegistroMRP[], meses: MesKey[]) {
   const filas: Array<Record<string, string | number>> = [];
 
   const agregarGrupo = (titulo: string, campo: CampoTextoMRP) => {
@@ -464,15 +510,15 @@ function construirHojaResumen(XLSX: typeof import("xlsx"), registros: RegistroMR
  */
 export async function construirLibroMRP(
   registros: RegistroMRP[],
-  hasta: MesKey = "dic",
+  meses: MesKey[],
   incluirResumen = true,
 ): Promise<ArrayBuffer> {
   const XLSX = await import("xlsx");
   const libro = XLSX.utils.book_new();
 
-  XLSX.utils.book_append_sheet(libro, construirHojaPrincipal(XLSX, registros, hasta), "Seguimiento");
+  XLSX.utils.book_append_sheet(libro, construirHojaPrincipal(XLSX, registros, meses), "Seguimiento");
   if (incluirResumen) {
-    XLSX.utils.book_append_sheet(libro, construirHojaResumen(XLSX, registros, hasta), "Resumen");
+    XLSX.utils.book_append_sheet(libro, construirHojaResumen(XLSX, registros, meses), "Resumen");
   }
 
   return XLSX.write(libro, { bookType: "xlsx", type: "array", compression: true }) as ArrayBuffer;
@@ -505,11 +551,11 @@ function descargarArchivo(datos: ArrayBuffer, nombre: string): void {
  */
 export async function exportarRegistrosExcel({
   registros,
-  hasta = "dic",
+  meses,
   nombreArchivo = "MRP_Seguimiento",
   incluirResumen = true,
 }: OpcionesExportacion): Promise<void> {
-  const datos = await construirLibroMRP(registros, hasta, incluirResumen);
+  const datos = await construirLibroMRP(registros, meses, incluirResumen);
   descargarArchivo(datos, nombreArchivoExportado(nombreArchivo));
 }
 

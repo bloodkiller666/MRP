@@ -1,16 +1,17 @@
 "use client";
 
-import { ANIO_PRONOSTICO, ETIQUETAS_ESTADO, MESES, REGLA_ESTADO } from "@/lib/constants";
+import { Plus } from "lucide-react";
+
+import { ETIQUETAS_ESTADO, REGLA_ESTADO } from "@/lib/constants";
 import {
-  etiquetaPeriodo,
   formatearCompacto,
   formatearNumero,
   formatearPorcentaje,
-  mesesHasta,
   resumirPeriodo,
   totalesPorUnidad,
 } from "@/lib/mrp-utils";
-import type { EstadoCumplimiento, MesKey, RegistroMRP } from "@/lib/types";
+import { abarcaVariosAnios, etiquetaMes, etiquetaMesAnio, etiquetaRango, mesesDePeriodo, nombreMes } from "@/lib/periodos";
+import type { EstadoCumplimiento, MesKey, Periodo, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { BarraCumplimiento, ESTILOS_ESTADO, EstadoPastilla } from "./Semaforo";
@@ -20,7 +21,8 @@ interface TarjetasResumenProps {
   registros: RegistroMRP[];
   /** Registros con todos los filtros salvo el semáforo: base de los contadores. */
   registrosParaSemaforo: RegistroMRP[];
-  hasta: MesKey;
+  /** Meses del periodo que se resumen (hasta el mes elegido). */
+  meses: MesKey[];
   estadoFiltro: EstadoCumplimiento | "";
   alCambiarEstado: (estado: EstadoCumplimiento | "") => void;
 }
@@ -49,11 +51,10 @@ function Tarjeta({
 export function SummaryCards({
   registros,
   registrosParaSemaforo,
-  hasta,
+  meses,
   estadoFiltro,
   alCambiarEstado,
 }: TarjetasResumenProps) {
-  const meses = mesesHasta(hasta);
   const resumen = resumirPeriodo(registros, meses);
   const conteos = resumirPeriodo(registrosParaSemaforo, meses).porEstado;
   // Cada unidad de medida se resume por separado: no se suman galones con kilos.
@@ -65,12 +66,12 @@ export function SummaryCards({
       meses,
     ),
   }));
-  const mesesVisibles = MESES.filter((mes) => meses.includes(mes.key));
+  const rotulo = abarcaVariosAnios(meses) ? etiquetaMesAnio : etiquetaMes;
   const conRealCargado = registros.filter((r) => meses.some((mes) => r.reales[mes] !== undefined)).length;
 
   return (
     <section
-      aria-label={`Indicadores del periodo ${etiquetaPeriodo(hasta, ANIO_PRONOSTICO)}`}
+      aria-label={`Indicadores del periodo ${etiquetaRango(meses)}`}
       className="grid grid-cols-2 gap-3 xl:grid-cols-[1.35fr_1fr_1fr_1.1fr]"
     >
       {/* Demanda ------------------------------------------------------------ */}
@@ -85,7 +86,7 @@ export function SummaryCards({
             <p className="num text-[1.75rem] leading-none font-semibold text-ink">–</p>
           ) : (
             porUnidad.map(({ unidad, registros: cantidad, resumen: r }) => {
-              const maximoMes = Math.max(...mesesVisibles.map((mes) => r.porMes[mes.key].demanda), 0);
+              const maximoMes = Math.max(...meses.map((mes) => r.porMes[mes].demanda), 0);
               return (
                 <div key={unidad} className="min-w-0">
                   <p className="flex items-baseline gap-1.5">
@@ -100,12 +101,12 @@ export function SummaryCards({
                     <span className="text-xs font-semibold text-ink-2">{unidad}</span>
                   </p>
                   <p className="mt-1 text-xs text-ink-3">{cantidad} registros</p>
-                  <div className="mt-3 grid auto-cols-fr grid-flow-col gap-2.5">
-                    {mesesVisibles.map((mes) => {
-                      const valor = r.porMes[mes.key].demanda;
+                  <div className="mt-3 grid auto-cols-fr grid-flow-col gap-2">
+                    {meses.map((mes) => {
+                      const valor = r.porMes[mes].demanda;
                       return (
-                        <div key={mes.key}>
-                          <p className="rotulo text-ink-3">{mes.label}</p>
+                        <div key={mes} title={`${nombreMes(mes)}: ${formatearNumero(valor)} ${unidad}`}>
+                          <p className="rotulo text-ink-3">{rotulo(mes)}</p>
                           <p className="num text-xs font-medium text-ink">{formatearCompacto(valor)}</p>
                           <div className="mt-1 h-1.5 w-full rounded-full bg-surface-3">
                             <div
@@ -149,8 +150,8 @@ export function SummaryCards({
           )}
         </p>
         <p className="mt-auto pt-4 text-[11px] leading-snug text-ink-3">
-          Despacho de meses cerrados + avance del mes en curso. Se carga con doble clic en la columna «Real»
-          o importando un Excel.
+          Despacho de meses cerrados + avance del mes en curso. Se carga en la pestaña «Cargar real», con doble
+          clic en la tabla o importando un Excel.
         </p>
       </Tarjeta>
 
@@ -211,41 +212,85 @@ export function SummaryCards({
   );
 }
 
-/** Selector segmentado «Pronóstico hasta» (de octubre al mes elegido). */
+/** Selector de periodo (Oct – Dic 2026, Ene – Mar 2027…) y del mes hasta el que se quiere ver. */
 export function SelectorPeriodo({
+  periodos,
+  periodoActivo,
+  alElegirPeriodo,
+  alCrearPeriodo,
+  mesesPeriodo,
   hasta,
   alCambiar,
 }: {
+  periodos: Periodo[];
+  periodoActivo: Periodo;
+  alElegirPeriodo: (periodo: Periodo) => void;
+  alCrearPeriodo: () => void;
+  mesesPeriodo: MesKey[];
   hasta: MesKey;
   alCambiar: (mes: MesKey) => void;
 }) {
+  const idDe = (p: Periodo) => `${p.desde}/${p.cantidad}`;
+  const rotulo = abarcaVariosAnios(mesesPeriodo) ? etiquetaMesAnio : etiquetaMes;
+
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="rotulo hidden text-ink-2 sm:inline">Pronóstico hasta</span>
-      <div
-        role="radiogroup"
-        aria-label="Pronóstico hasta el mes"
-        className="inline-flex rounded-lg border border-line-strong bg-surface p-0.5"
-      >
-        {MESES.map((mes) => {
-          const activo = mes.key === hasta;
-          return (
-            <button
-              key={mes.key}
-              type="button"
-              role="radio"
-              aria-checked={activo}
-              onClick={() => alCambiar(mes.key)}
-              title={`Ver el pronóstico de octubre hasta ${mes.nombre.toLowerCase()}`}
-              className={cn(
-                "h-7 min-w-12 rounded-md px-3 text-xs font-semibold transition-colors",
-                activo ? "bg-accent text-accent-ink shadow-sm" : "text-ink-2 hover:bg-surface-3 hover:text-ink",
-              )}
-            >
-              {mes.label}
-            </button>
-          );
-        })}
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex items-center gap-2">
+        <label htmlFor="selector-periodo" className="rotulo text-ink-2">
+          Periodo
+        </label>
+        <select
+          id="selector-periodo"
+          value={idDe(periodoActivo)}
+          onChange={(evento) => {
+            const elegido = periodos.find((p) => idDe(p) === evento.target.value);
+            if (elegido) alElegirPeriodo(elegido);
+          }}
+          className="h-9 cursor-pointer rounded-lg border border-line-strong bg-surface px-2.5 text-sm font-medium text-ink"
+        >
+          {periodos.map((p) => (
+            <option key={idDe(p)} value={idDe(p)}>
+              {etiquetaRango(mesesDePeriodo(p))}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={alCrearPeriodo}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+        >
+          <Plus className="size-3.5" />
+          Nuevo periodo
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2.5">
+        <span className="rotulo hidden text-ink-2 sm:inline">Pronóstico hasta</span>
+        <div
+          role="radiogroup"
+          aria-label="Pronóstico hasta el mes"
+          className="inline-flex max-w-full flex-wrap rounded-lg border border-line-strong bg-surface p-0.5"
+        >
+          {mesesPeriodo.map((mes) => {
+            const activo = mes === hasta;
+            return (
+              <button
+                key={mes}
+                type="button"
+                role="radio"
+                aria-checked={activo}
+                onClick={() => alCambiar(mes)}
+                title={`Ver el pronóstico de ${nombreMes(mesesPeriodo[0]).toLowerCase()} hasta ${nombreMes(mes).toLowerCase()}`}
+                className={cn(
+                  "h-7 min-w-12 rounded-md px-3 text-xs font-semibold transition-colors",
+                  activo ? "bg-accent text-accent-ink shadow-sm" : "text-ink-2 hover:bg-surface-3 hover:text-ink",
+                )}
+              >
+                {rotulo(mes)}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
