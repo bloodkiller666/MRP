@@ -42,13 +42,13 @@ export function MenuDatos({ opciones }: { opciones: OpcionMenu[] }) {
 
   return (
     <details ref={ref} className="relative">
-      <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-[5px] border border-chrome-line px-3 text-sm font-medium text-chrome-ink transition-colors hover:bg-chrome-2 [&::-webkit-details-marker]:hidden">
+      <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-white/15 px-3 text-sm font-medium text-chrome-ink transition-colors hover:bg-white/10 [&::-webkit-details-marker]:hidden">
         <Database className="size-4 text-chrome-ink-2" />
         <span className="hidden sm:inline">Datos</span>
         <ChevronDown className="size-3.5 text-chrome-ink-2" />
       </summary>
 
-      <div className="absolute right-0 z-40 mt-1.5 w-72 rounded-md border border-line-strong bg-surface py-1.5 text-ink shadow-xl">
+      <div className="absolute right-0 z-40 mt-1.5 w-72 rounded-xl border border-line-strong bg-surface py-1.5 text-ink shadow-pop">
         {opciones.map((opcion) => (
           <div key={opcion.etiqueta}>
             {opcion.separador ? <div className="my-1.5 border-t border-line" /> : null}

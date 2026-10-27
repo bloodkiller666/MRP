@@ -29,8 +29,8 @@ export function ThemeToggle({ className }: PropsTema) {
       title={etiqueta}
       onClick={alternar}
       className={cn(
-        "inline-flex size-9 shrink-0 items-center justify-center rounded-[5px] text-chrome-ink-2 transition-colors",
-        "hover:bg-chrome-2 hover:text-chrome-ink",
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-chrome-ink-2 transition-colors",
+        "hover:bg-white/10 hover:text-chrome-ink",
         className,
       )}
     >

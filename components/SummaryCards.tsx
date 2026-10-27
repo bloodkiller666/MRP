@@ -38,7 +38,7 @@ function Tarjeta({
   className?: string;
 }) {
   return (
-    <article className={cn("flex flex-col rounded-md border border-line bg-surface p-4", className)}>
+    <article className={cn("flex flex-col rounded-xl border border-line bg-surface p-4 shadow-card", className)}>
       <h3 className="rotulo text-ink-2">{titulo}</h3>
       {children}
     </article>
@@ -225,7 +225,7 @@ export function SelectorPeriodo({
       <div
         role="radiogroup"
         aria-label="Pronóstico hasta el mes"
-        className="inline-flex rounded-[5px] border border-line-strong bg-surface p-0.5"
+        className="inline-flex rounded-lg border border-line-strong bg-surface p-0.5"
       >
         {MESES.map((mes) => {
           const activo = mes.key === hasta;
@@ -238,8 +238,8 @@ export function SelectorPeriodo({
               onClick={() => alCambiar(mes.key)}
               title={`Ver el pronóstico de octubre hasta ${mes.nombre.toLowerCase()}`}
               className={cn(
-                "h-7 min-w-12 rounded-[3px] px-3 text-xs font-semibold transition-colors",
-                activo ? "bg-accent text-accent-ink" : "text-ink-2 hover:bg-surface-3 hover:text-ink",
+                "h-7 min-w-12 rounded-md px-3 text-xs font-semibold transition-colors",
+                activo ? "bg-accent text-accent-ink shadow-sm" : "text-ink-2 hover:bg-surface-3 hover:text-ink",
               )}
             >
               {mes.label}

@@ -67,7 +67,7 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className={cn("flex flex-col rounded-md border border-line bg-surface p-4", className)}>
+    <section className={cn("flex flex-col rounded-xl border border-line bg-surface p-4 shadow-card", className)}>
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-ink">{titulo}</h3>
@@ -103,7 +103,7 @@ function TooltipVendedor({ active, payload, unidad }: PropsTooltip & { unidad: s
   if (!fila) return null;
 
   return (
-    <div className="rounded-md border border-line-strong bg-surface px-3 py-2 shadow-lg">
+    <div className="rounded-lg border border-line-strong bg-surface px-3 py-2 shadow-pop">
       <p className="text-xs font-semibold text-ink">{fila.vendedor}</p>
       <ul className="mt-1.5 flex flex-col gap-1">
         {payload.map((item) => (
@@ -137,7 +137,7 @@ function TooltipSimple({
   if (!active || !payload || payload.length === 0) return null;
   const fila = payload[0].payload;
   return (
-    <div className="rounded-md border border-line-strong bg-surface px-3 py-2 shadow-lg">
+    <div className="rounded-lg border border-line-strong bg-surface px-3 py-2 shadow-pop">
       <p className="text-xs font-semibold text-ink">{fila?.etiqueta}</p>
       <p className="num mt-1 text-xs text-ink-2">
         <span className="font-semibold text-ink">{formatearNumero(Number(payload[0].value))}</span> {unidad} ·{" "}
@@ -211,7 +211,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
 
   if (registros.length === 0) {
     return (
-      <section className="rounded-md border border-line bg-surface px-4 py-16 text-center">
+      <section className="rounded-xl border border-line bg-surface px-4 py-16 shadow-card text-center">
         <Inbox className="mx-auto mb-3 size-8 text-line-strong" />
         <p className="text-sm font-medium text-ink">No hay datos para graficar</p>
         <p className="mt-1 text-xs text-ink-3">
@@ -229,7 +229,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
   return (
     <div className="flex flex-col gap-3">
       {/* Selector de unidad + estado de cartera ------------------------------- */}
-      <section className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
+      <section className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-ink">
@@ -243,7 +243,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
             <div
               role="radiogroup"
               aria-label="Unidad de medida"
-              className="inline-flex rounded-[5px] border border-line-strong bg-surface p-0.5"
+              className="inline-flex rounded-lg border border-line-strong bg-surface p-0.5"
             >
               {unidades.map((u) => (
                 <button
@@ -253,7 +253,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
                   aria-checked={u.unidad === unidad}
                   onClick={() => setUnidadElegida(u.unidad)}
                   className={cn(
-                    "h-7 min-w-14 rounded-[3px] px-3 text-xs font-semibold transition-colors",
+                    "h-7 min-w-14 rounded-md px-3 text-xs font-semibold transition-colors",
                     u.unidad === unidad
                       ? "bg-accent text-accent-ink"
                       : "text-ink-2 hover:bg-surface-3 hover:text-ink",
@@ -376,7 +376,7 @@ export function Dashboard({ registros, hasta }: DashboardProps) {
             <summary className="w-fit cursor-pointer font-medium text-accent hover:text-accent-hover">
               Ver como tabla
             </summary>
-            <div className="mt-2 overflow-x-auto rounded-md border border-line">
+            <div className="mt-2 overflow-x-auto rounded-lg border border-line">
               <table className="w-full min-w-max">
                 <thead className="bg-surface-2 text-left">
                   <tr>

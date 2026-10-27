@@ -182,7 +182,7 @@ export function MRPTable({
   const columnasTotales = camposVisibles.length + mesesVisibles.length * 2 + 4;
 
   return (
-    <section className="overflow-hidden rounded-md border border-line bg-surface">
+    <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
       {/* ------------------------------ Escritorio ------------------------------ */}
       <div className="hidden max-h-[min(70vh,48rem)] min-h-64 overflow-auto md:block">
         <table className="w-full min-w-max border-separate border-spacing-0 text-[13px]">
@@ -504,7 +504,7 @@ export function MRPTable({
             <button
               type="button"
               onClick={() => setLimiteMovil((previo) => previo + 20)}
-              className="h-9 rounded-[5px] border border-line-strong px-4 text-sm font-medium text-ink"
+              className="h-9 rounded-lg border border-line-strong px-4 text-sm font-medium text-ink"
             >
               Mostrar más ({filas.length - limiteMovil} restantes)
             </button>

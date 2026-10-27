@@ -60,7 +60,7 @@ export function FiltersBar({
   );
 
   return (
-    <section aria-label="Filtros" className="rounded-md border border-line bg-surface p-3 sm:p-4">
+    <section aria-label="Filtros" className="rounded-xl border border-line bg-surface p-3 shadow-card sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-52 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-3" />

@@ -5,7 +5,7 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react
 import { cn } from "@/lib/utils";
 
 export const clasesInput =
-  "h-9 w-full rounded-[5px] border border-line-strong bg-surface px-2.5 text-sm text-ink " +
+  "h-9 w-full rounded-lg border border-line-strong bg-surface px-2.5 text-sm text-ink " +
   "placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 " +
   "focus:ring-accent/25 disabled:bg-surface-2";
 

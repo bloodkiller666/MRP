@@ -43,7 +43,7 @@ export function Boton({
     <button
       type={type}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-[5px] font-medium whitespace-nowrap transition-colors",
+        "inline-flex shrink-0 items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors",
         "disabled:cursor-not-allowed disabled:opacity-70",
         VARIANTES[variante],
         TAMANOS[tamano],

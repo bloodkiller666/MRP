@@ -55,7 +55,7 @@ import { cn } from "@/lib/utils";
 type Vista = "seguimiento" | "analisis";
 
 const clasesBotonCabecera =
-  "inline-flex h-9 items-center gap-2 rounded-[5px] px-3.5 text-sm font-semibold whitespace-nowrap transition-colors";
+  "inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-semibold whitespace-nowrap transition-colors";
 
 /**
  * Raíz de la aplicación MRP (Client Component).
@@ -253,10 +253,10 @@ export function MRPApp() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* ------------------------------ Cabecera ------------------------------ */}
-      <header className="sticky top-0 z-30 bg-chrome text-chrome-ink">
+      <header className="sticky top-0 z-30 bg-chrome-grad text-chrome-ink shadow-pop">
         <div className="mx-auto flex w-full max-w-[112rem] items-center justify-between gap-3 px-4 pt-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-[5px] border border-chrome-line bg-chrome-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/10 shadow-inner backdrop-blur">
               <Route className="size-[18px] text-chrome-ink" strokeWidth={1.75} />
             </span>
             <div className="min-w-0">
@@ -271,7 +271,7 @@ export function MRPApp() {
             <button
               type="button"
               onClick={abrirNuevo}
-              className={cn(clasesBotonCabecera, "bg-chrome-ink text-chrome hover:bg-white")}
+              className={cn(clasesBotonCabecera, "bg-white text-chrome shadow-sm hover:bg-accent-soft")}
             >
               <Plus className="size-4" strokeWidth={2.25} />
               <span className="hidden sm:inline">Nuevo registro</span>
@@ -348,7 +348,7 @@ export function MRPApp() {
                 className={cn(
                   "-mb-px inline-flex h-10 items-center gap-2 border-b-2 px-3.5 text-sm font-medium transition-colors",
                   activa
-                    ? "border-chrome-ink text-chrome-ink"
+                    ? "border-white text-white"
                     : "border-transparent text-chrome-ink-2 hover:text-chrome-ink",
                 )}
               >
@@ -358,14 +358,14 @@ export function MRPApp() {
             );
           })}
         </nav>
-        <div className="border-b border-chrome-line" />
+        <div className="border-b border-white/10" />
       </header>
 
       {/* ------------------------------ Contenido ----------------------------- */}
       <main className="mx-auto flex w-full max-w-[112rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-ink">
+            <h2 className="text-2xl font-semibold tracking-tight text-ink">
               {vista === "seguimiento" ? "Seguimiento de demanda y cumplimiento" : "Análisis del periodo"}
             </h2>
             <p className="mt-0.5 text-sm text-ink-2">
@@ -422,7 +422,7 @@ export function MRPApp() {
         )}
       </main>
 
-      <footer className="border-t border-line bg-surface">
+      <footer className="border-t border-line bg-surface/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[112rem] flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-3 text-xs text-ink-3 sm:px-6">
           <p className="flex items-center gap-1.5">
             <FileSpreadsheet className="size-3.5" />
@@ -445,7 +445,7 @@ export function MRPApp() {
       {aviso ? (
         <div
           role="status"
-          className="fixed right-4 bottom-4 left-4 z-50 flex items-start justify-between gap-3 rounded-md border border-line-strong bg-chrome px-4 py-3 text-sm text-chrome-ink shadow-xl sm:left-auto sm:max-w-sm"
+          className="fixed right-4 bottom-4 left-4 z-50 flex items-start justify-between gap-3 rounded-xl border border-chrome-line bg-chrome px-4 py-3 text-sm text-chrome-ink shadow-pop sm:left-auto sm:max-w-sm"
         >
           <p className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ok" />

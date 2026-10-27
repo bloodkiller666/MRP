@@ -39,7 +39,7 @@ export function ColumnasSelector({ ocultas, alAlternar, alMostrarTodas }: PropsC
 
   return (
     <details ref={ref} className="relative">
-      <summary className="inline-flex h-9 shrink-0 cursor-pointer list-none items-center gap-2 rounded-[5px] border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
+      <summary className="inline-flex h-9 shrink-0 cursor-pointer list-none items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
         <Columns3 className="size-4 text-ink-2" />
         <span className="hidden sm:inline">Columnas</span>
         {hayOcultas ? (
@@ -50,7 +50,7 @@ export function ColumnasSelector({ ocultas, alAlternar, alMostrarTodas }: PropsC
         <ChevronDown className="size-3.5 text-ink-3" />
       </summary>
 
-      <div className="absolute right-0 z-30 mt-1.5 w-72 rounded-md border border-line-strong bg-surface p-3 shadow-xl">
+      <div className="absolute right-0 z-30 mt-1.5 w-72 rounded-xl border border-line-strong bg-surface p-3 shadow-pop">
         <p className="rotulo text-ink-2">Columnas visibles</p>
         <p className="mt-0.5 text-[11px] text-ink-3">
           Ocultar no altera los totales ni el cumplimiento.

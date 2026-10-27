@@ -3,8 +3,7 @@
 /*
  * Sistema de diseño de la aplicación MRP.
  *
- * Paleta pensada para una torre de control de suministro: neutros fríos con un
- * único acento azul acero, y tres colores de estado (verde / ámbar / rojo)
+ * Paleta corporativa: azul marino/índigo profundo con un único acento índigo, y tres colores de estado (verde / ámbar / rojo)
  * reservados exclusivamente para el semáforo de cumplimiento.
  *
  * El modo oscuro se activa con la clase `.dark` en `<html>` (no con
@@ -17,90 +16,99 @@
 :root {
   color-scheme: light;
 
-  --canvas: #edf0f3;
+  --canvas: #f2f4fa;
   --surface: #ffffff;
-  --surface-2: #f5f7f9;
-  --surface-3: #e8ecf0;
-  --line: #d9dfe6;
-  --line-strong: #bcc6d1;
+  --surface-2: #f7f8fc;
+  --surface-3: #eaedf6;
+  --line: #e0e4ef;
+  --line-strong: #c6cddf;
 
-  --ink: #13202c;
-  --ink-2: #4a5967;
-  --ink-3: #75828f;
+  --ink: #0e1630;
+  --ink-2: #444f6f;
+  --ink-3: #65708d;
 
-  --chrome: #0d2133;
-  --chrome-2: #17344d;
-  --chrome-line: #26455f;
-  --chrome-ink: #e8eff5;
-  --chrome-ink-2: #9fb4c6;
+  --chrome: #0f1a3d;
+  --chrome-2: #1b2a63;
+  --chrome-line: #2b3c7a;
+  --chrome-ink: #eef1fc;
+  --chrome-ink-2: #a9b5da;
 
-  --accent: #1d5d8a;
-  --accent-hover: #164a6e;
-  --accent-soft: #e2edf5;
+  --accent: #3b4fd8;
+  --accent-hover: #2d3eb8;
+  --accent-soft: #e8ebfd;
   --accent-ink: #ffffff;
 
-  --ok: #17794a;
-  --ok-soft: #e1f2e9;
-  --ok-line: #a6d5bb;
-  --warn: #8f5f00;
-  --warn-soft: #fff1cc;
-  --warn-line: #e6c56c;
-  --bad: #b3261e;
-  --bad-soft: #fce7e5;
-  --bad-line: #efb0aa;
+  --ok: #0c7a54;
+  --ok-soft: #e0f5ec;
+  --ok-line: #9fd8bf;
+  --warn: #8a5300;
+  --warn-soft: #fff0cf;
+  --warn-line: #e8c470;
+  --bad: #bf2630;
+  --bad-soft: #fde8e9;
+  --bad-line: #f0b1b5;
 
-  /* Gráficos: rampa ordinal de un solo tono (mes más reciente = más contraste). */
-  --viz-m1: #86b6ef;
-  --viz-m2: #2a78d6;
-  --viz-m3: #104281;
-  --viz-bar: #2a78d6;
-  --viz-real: #1c5cab;
-  --viz-track: #dfe5ec;
-  --viz-grid: #e3e8ee;
+  /* Gráficos: rampa ordinal de un solo tono índigo. */
+  --viz-m1: #a8b5f6;
+  --viz-m2: #5a6de8;
+  --viz-m3: #27318f;
+  --viz-bar: #5a6de8;
+  --viz-real: #3444c2;
+  --viz-track: #e3e7f4;
+  --viz-grid: #e7eaf4;
+
+  --radius: 10px;
+  --shadow-card: 0 1px 2px rgb(15 26 61 / 0.05), 0 4px 14px -6px rgb(15 26 61 / 0.10);
+  --shadow-pop: 0 12px 32px -8px rgb(15 26 61 / 0.28);
+  --chrome-grad: linear-gradient(135deg, #0f1a3d 0%, #18276a 55%, #2a3aa8 130%);
 }
 
 .dark {
   color-scheme: dark;
 
-  --canvas: #0a141d;
-  --surface: #101d29;
-  --surface-2: #142433;
-  --surface-3: #1b3042;
-  --line: #243a4d;
-  --line-strong: #35526b;
+  --canvas: #090e20;
+  --surface: #111836;
+  --surface-2: #161f42;
+  --surface-3: #1f2a58;
+  --line: #243060;
+  --line-strong: #37467f;
 
-  --ink: #e7edf3;
-  --ink-2: #a6b4c2;
-  --ink-3: #74889b;
+  --ink: #e9edfc;
+  --ink-2: #aab5d9;
+  --ink-3: #8090b8;
 
-  --chrome: #07111a;
-  --chrome-2: #102232;
-  --chrome-line: #1f3a50;
-  --chrome-ink: #e8eff5;
-  --chrome-ink-2: #8ea5b8;
+  --chrome: #070b1a;
+  --chrome-2: #131c42;
+  --chrome-line: #222e60;
+  --chrome-ink: #eef1fc;
+  --chrome-ink-2: #93a1cf;
 
-  --accent: #5ba5dc;
-  --accent-hover: #7bb8e6;
-  --accent-soft: #15324a;
-  --accent-ink: #07121b;
+  --accent: #8d9cff;
+  --accent-hover: #a8b4ff;
+  --accent-soft: #1d2866;
+  --accent-ink: #090e2a;
 
-  --ok: #4cc58b;
-  --ok-soft: #0f2f23;
-  --ok-line: #1d5a41;
-  --warn: #e5b53f;
-  --warn-soft: #382c0b;
-  --warn-line: #6b5217;
-  --bad: #f2786d;
-  --bad-soft: #3c1814;
-  --bad-line: #7a2f28;
+  --ok: #43d19c;
+  --ok-soft: #0e3024;
+  --ok-line: #1d5e45;
+  --warn: #f2c050;
+  --warn-soft: #3a2d0b;
+  --warn-line: #6e5418;
+  --bad: #ff8189;
+  --bad-soft: #401a1f;
+  --bad-line: #7e2f37;
 
-  --viz-m1: #256abf;
-  --viz-m2: #5598e7;
-  --viz-m3: #a9cdf6;
-  --viz-bar: #5598e7;
-  --viz-real: #86b6ef;
-  --viz-track: #1f3448;
-  --viz-grid: #1d3143;
+  --viz-m1: #3a4bb8;
+  --viz-m2: #7f8fff;
+  --viz-m3: #c6cdff;
+  --viz-bar: #7f8fff;
+  --viz-real: #aab5ff;
+  --viz-track: #232f60;
+  --viz-grid: #1f2a54;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px -8px rgb(0 0 0 / 0.55);
+  --shadow-pop: 0 14px 36px -8px rgb(0 0 0 / 0.7);
+  --chrome-grad: linear-gradient(135deg, #070b1a 0%, #0f1740 60%, #1a2766 130%);
 }
 
 @theme inline {
@@ -168,6 +176,18 @@ body {
 }
 
 @layer utilities {
+  .bg-chrome-grad {
+    background: var(--chrome-grad);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-pop {
+    box-shadow: var(--shadow-pop);
+  }
+
   /* Números alineados en columnas. */
   .num {
     font-variant-numeric: tabular-nums;

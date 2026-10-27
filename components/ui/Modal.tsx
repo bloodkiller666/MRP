@@ -69,7 +69,7 @@ export function Modal({
         aria-modal="true"
         aria-label={titulo}
         className={cn(
-          "flex max-h-full w-full flex-col overflow-hidden border-line bg-surface shadow-2xl sm:rounded-md sm:border",
+          "flex max-h-full w-full flex-col overflow-hidden border-line bg-surface shadow-pop sm:rounded-2xl sm:border",
           TAMANOS[tamano],
         )}
       >
