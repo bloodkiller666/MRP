@@ -470,7 +470,7 @@ export function ResumenCostos({
       })}
 
       {/* -------------------------------- Notas ---------------------------------- */}
-      <p className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-ink-3">
+      <p className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-xs text-ink-3">
         <span>
           Costo = Σ (proporción × precio vigente del insumo) + gas ({soles4(datos.parametros.gas)}) + mano de obra (
           {soles4(datos.parametros.mo)}) · soles/galón = soles/kg × {datos.parametros.kgPorGalon}

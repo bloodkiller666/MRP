@@ -43,8 +43,8 @@ interface Orden {
 
 /** Posición fija a la derecha de las tres columnas de cierre (junto a «Acciones», 4 rem). */
 const POS_CUMPL = "sticky right-16";
-const POS_REAL = "sticky right-[14.5rem]";
-const POS_DEMANDA = "sticky right-[22.5rem]";
+const POS_REAL = "sticky right-[13.5rem]";
+const POS_DEMANDA = "sticky right-[19.5rem]";
 const CELDA_CIERRE = "z-[5] border-b border-line bg-surface-2 px-3 py-2 text-[13px]";
 const ALTO_PIE = 2.5;
 const PIE_CIERRE = "z-20 h-10 border-t border-line-strong bg-chrome px-3 py-0 text-chrome-ink";
@@ -52,7 +52,7 @@ const PIE_CIERRE = "z-20 h-10 border-t border-line-strong bg-chrome px-3 py-0 te
 /** Ancho máximo del texto de cada columna (se trunca con «…»; el título muestra el valor completo). */
 const ANCHO_TEXTO: Partial<Record<CampoTextoMRP, string>> = {
   propietario: "max-w-[9.5rem]",
-  cuenta: "max-w-[15rem]",
+  cuenta: "max-w-[12.5rem]",
   detalleProducto: "max-w-[11rem]",
   tipoAplicacion: "max-w-[9rem]",
   departamento: "max-w-[8rem]",
@@ -72,6 +72,18 @@ const LISTA_MEZCLA: Partial<Record<CampoTextoMRP, string[]>> = {
   aditivo: ADITIVOS,
   tipoPen: TIPOS_PEN,
 };
+
+/** Cliente: columna fija a la izquierda (14 rem en total) para no perder de qué fila son las cifras. */
+const ANCHO_CLIENTE = "w-[14rem] min-w-[14rem] max-w-[14rem]";
+const PIN_CLIENTE_TD = cn("sticky left-0 z-[5] border-r border-line bg-surface", ANCHO_CLIENTE);
+const PIN_CLIENTE_TH = cn("left-0 z-20! border-r border-line", ANCHO_CLIENTE);
+
+/** Orden en pantalla: primero lo que identifica la fila (cliente y producto). */
+const ORDEN_TABLA: CampoTextoMRP[] = [
+  "cuenta",
+  "detalleProducto",
+  ...CAMPOS_TEXTO.filter((campo) => campo !== "cuenta" && campo !== "detalleProducto"),
+];
 
 const clasesTh =
   "sticky z-10 border-b border-line-strong bg-surface-2 px-3 text-left align-bottom whitespace-nowrap";
@@ -152,7 +164,7 @@ export function MRPTable({
       })),
     [meses, variosAnios],
   );
-  const camposVisibles = CAMPOS_TEXTO.filter((campo) => !ocultas.includes(campo));
+  const camposVisibles = ORDEN_TABLA.filter((campo) => !ocultas.includes(campo));
   const resumen = useMemo(() => resumirPeriodo(registros, meses), [registros, meses]);
   // Nunca se suman unidades distintas: con varias UM el pie trae un total por cada una.
   const porUnidad = useMemo(() => resumenPorUnidad(registros, meses), [registros, meses]);
@@ -204,7 +216,7 @@ export function MRPTable({
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
       {/* ------------------------------ Escritorio ------------------------------ */}
-      <div className="hidden max-h-[min(70vh,48rem)] min-h-64 overflow-auto md:block">
+      <div className="hidden max-h-[max(24rem,calc(100dvh-11rem))] min-h-64 overflow-auto md:block">
         <table className="w-full min-w-max border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
@@ -217,6 +229,7 @@ export function MRPTable({
                     clave={clave}
                     orden={orden}
                     alOrdenar={alOrdenar}
+                    className={campo === "cuenta" ? PIN_CLIENTE_TH : undefined}
                   />
                 ) : (
                   <th key={campo} scope="col" rowSpan={2} className={cn(clasesTh, "top-0 pb-2")}>
@@ -263,14 +276,14 @@ export function MRPTable({
                 clave="demanda"
                 orden={orden}
                 alOrdenar={alOrdenar}
-                posicion={`${POS_DEMANDA} w-32 min-w-32 border-l border-line-strong`}
+                posicion={`${POS_DEMANDA} w-24 min-w-24 border-l border-line-strong`}
               />
               <CabeceraSimple
                 etiqueta="Real + avance"
                 clave="real"
                 orden={orden}
                 alOrdenar={alOrdenar}
-                posicion={`${POS_REAL} w-32 min-w-32`}
+                posicion={`${POS_REAL} w-24 min-w-24`}
               />
               <CabeceraSimple
                 etiqueta="Cumplimiento"
@@ -278,7 +291,7 @@ export function MRPTable({
                 orden={orden}
                 alOrdenar={alOrdenar}
                 izquierda
-                posicion={`${POS_CUMPL} w-[10.5rem] min-w-[10.5rem]`}
+                posicion={`${POS_CUMPL} w-[9.5rem] min-w-[9.5rem]`}
               />
             </tr>
           </thead>
@@ -342,7 +355,7 @@ export function MRPTable({
                         valor={registro[campo]}
                         tipo="texto"
                         anchoTexto={ANCHO_TEXTO[campo]}
-                        className={cn(claseBorde, campo === "cuenta" && "font-medium")}
+                        className={cn(claseBorde, campo === "cuenta" && cn("font-medium", PIN_CLIENTE_TD))}
                         alGuardar={(valor) => alActualizarCampo(registro.id, campo, String(valor ?? ""))}
                       />
                     );
@@ -371,7 +384,7 @@ export function MRPTable({
                   <td className={cn(CELDA_CIERRE, POS_CUMPL)}>
                     <div className="flex items-center gap-2.5">
                       {c.ratio !== null ? (
-                        <BarraCumplimiento estado={c.estado} ratio={c.ratio} className="w-16" />
+                        <BarraCumplimiento estado={c.estado} ratio={c.ratio} className="w-12" />
                       ) : null}
                       <EstadoPastilla
                         estado={c.estado}
@@ -529,7 +542,7 @@ export function MRPTable({
         ) : null}
       </ul>
 
-      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-surface-2 px-3 py-2 text-[11px] text-ink-3">
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-surface-2 px-3 py-2 text-xs text-ink-3">
         <span className="hidden md:inline">
           Doble clic en una celda para editarla · <kbd className="font-sans font-semibold">Enter</kbd> guarda ·{" "}
           <kbd className="font-sans font-semibold">Esc</kbd> cancela

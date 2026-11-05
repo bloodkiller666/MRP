@@ -70,7 +70,7 @@ export function MenuDatos({ opciones }: { opciones: OpcionMenu[] }) {
               </span>
               <span className="min-w-0">
                 <span className="block text-[13px] font-medium">{opcion.etiqueta}</span>
-                {opcion.detalle ? <span className="block text-[11px] text-ink-3">{opcion.detalle}</span> : null}
+                {opcion.detalle ? <span className="block text-xs text-ink-3">{opcion.detalle}</span> : null}
               </span>
             </button>
           </div>

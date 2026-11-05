@@ -252,7 +252,7 @@ export function CostosApp() {
               alComparar={setCompararIds}
             />
             {NOTAS_RESUMEN.length > 0 ? (
-              <ul className="px-1 text-[11px] text-ink-3">
+              <ul className="px-1 text-xs text-ink-3">
                 {NOTAS_RESUMEN.map((n) => (
                   <li key={n}>{n}</li>
                 ))}

@@ -115,6 +115,7 @@ export const COLUMNAS_OCULTABLES: ColumnaTabla[] = [...CAMPOS_TEXTO];
 
 /** Columnas que arrancan ocultas la primera vez (la vista se centra en lo comercial). */
 export const COLUMNAS_OCULTAS_INICIALES: ColumnaTabla[] = [
+  "tipoAplicacion",
   "tipoPen",
   "departamento",
   "proyecto",
@@ -207,7 +208,7 @@ export const REGLA_ESTADO: Record<EstadoCumplimiento, string> = {
 export const STORAGE_KEY = "mrp:registros:v2";
 export const CATALOGO_STORAGE_KEY = "mrp:catalogo:v2";
 export const TEMA_STORAGE_KEY = "mrp:tema";
-export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v2";
+export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v3";
 export const PERIODOS_STORAGE_KEY = "mrp:periodos:v1";
 export const TASAS_STORAGE_KEY = "mrp:tasas:v1";
 

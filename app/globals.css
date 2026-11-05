@@ -23,6 +23,7 @@
   --surface-3: #e3e8e9;
   --line: #d6dcde;
   --line-strong: #b9c2c5;
+  --field: #7a868b;
 
   --ink: #14191c;
   --ink-2: #414b50;
@@ -75,6 +76,7 @@
   --surface-3: #263034;
   --line: #2b363a;
   --line-strong: #3f4d52;
+  --field: #66767c;
 
   --ink: #eaf0f1;
   --ink-2: #aebbbf;
@@ -123,6 +125,7 @@
   --color-surface-3: var(--surface-3);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-field: var(--field);
 
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
@@ -148,6 +151,10 @@
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
   --color-bad-line: var(--bad-line);
+
+  /* Escala mínima legible: 12 px reales con la base de 15,5 px. */
+  --text-xs: 0.78rem;
+  --text-xs--line-height: 1.1rem;
 
   --font-sans: var(--font-barlow), "Segoe UI", system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
@@ -208,9 +215,9 @@ body {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Rótulo pequeño en mayúsculas, usado en cabeceras y etiquetas. */
+  /* Rótulo de cabeceras y etiquetas: pequeño, en negrita media y sin mayúsculas. */
   .rotulo {
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     font-weight: 600;
     letter-spacing: 0.02em;
   }

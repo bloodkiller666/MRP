@@ -109,7 +109,7 @@ export function DetalleRecetaModal({
               {variacion ? <Variacion pct={variacion.pct} fecha={variacion.fechaCambio} /> : <span className="text-sm text-ink-3">sin cambios</span>}
             </div>
             {variacion ? (
-              <p className="num mt-1 text-[11px] text-ink-3">
+              <p className="num mt-1 text-xs text-ink-3">
                 de {soles2(variacion.anterior)} a {soles2(variacion.actual)} S/gal
               </p>
             ) : null}
@@ -263,7 +263,7 @@ function Cifra({ etiqueta, valor, detalle, grande }: { etiqueta: string; valor: 
     <div className="rounded-md border border-line bg-surface-2/60 p-3">
       <p className="rotulo text-ink-2">{etiqueta}</p>
       <p className={`num mt-1 font-semibold text-ink ${grande ? "text-2xl" : "text-lg"}`}>{valor}</p>
-      {detalle ? <p className="mt-0.5 text-[11px] text-ink-3">{detalle}</p> : null}
+      {detalle ? <p className="mt-0.5 text-xs text-ink-3">{detalle}</p> : null}
     </div>
   );
 }

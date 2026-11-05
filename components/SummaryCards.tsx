@@ -2,19 +2,13 @@
 
 import { Plus } from "lucide-react";
 
-import { ETIQUETAS_ESTADO, REGLA_ESTADO } from "@/lib/constants";
-import {
-  formatearCompacto,
-  formatearNumero,
-  formatearPorcentaje,
-  resumirPeriodo,
-  totalesPorUnidad,
-} from "@/lib/mrp-utils";
+import { ETIQUETAS_ESTADO, REGLA_ESTADO, UMBRAL_AMARILLO, UMBRAL_VERDE } from "@/lib/constants";
+import { formatearNumero, formatearPorcentaje, resumirPeriodo, totalesPorUnidad } from "@/lib/mrp-utils";
 import { abarcaVariosAnios, etiquetaMes, etiquetaMesAnio, etiquetaRango, mesesDePeriodo, nombreMes } from "@/lib/periodos";
 import type { EstadoCumplimiento, MesKey, Periodo, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { BarraCumplimiento, ESTILOS_ESTADO, EstadoPastilla } from "./Semaforo";
+import { ESTILOS_ESTADO, EstadoPastilla } from "./Semaforo";
 
 interface TarjetasResumenProps {
   /** Registros de la vista actual (con todos los filtros, incluido el semáforo). */
@@ -29,25 +23,46 @@ interface TarjetasResumenProps {
 
 const ESTADOS_FILTRABLES: EstadoCumplimiento[] = ["verde", "amarillo", "rojo", "sin-real"];
 
-/** Contenedor común de las tarjetas: borde fino, sin sombras. */
-function Tarjeta({
-  titulo,
-  children,
-  className,
-}: {
-  titulo: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
+/**
+ * Barra de cumplimiento con las dos líneas de corte del semáforo (70 % y 90 %) marcadas sobre
+ * la propia barra, como las marcas de una calzada: se lee el color y también cuánto falta para
+ * el siguiente nivel.
+ */
+function BarraConUmbrales({ estado, ratio }: { estado: EstadoCumplimiento; ratio: number | null }) {
+  const ancho = ratio === null ? 0 : Math.min(ratio, 1) * 100;
+  const cortes = [UMBRAL_AMARILLO, UMBRAL_VERDE];
   return (
-    <article className={cn("flex flex-col rounded-xl border border-line bg-surface p-4 shadow-card", className)}>
-      <h3 className="rotulo text-ink-2">{titulo}</h3>
-      {children}
-    </article>
+    <div className="mt-3">
+      <div className="relative h-2.5 rounded-full bg-surface-3">
+        <div
+          className={cn("h-full rounded-full transition-[width] duration-300", ESTILOS_ESTADO[estado].barra)}
+          style={{ width: `${ancho}%` }}
+        />
+        {cortes.map((corte) => (
+          <span
+            key={corte}
+            aria-hidden
+            className="absolute -top-1 -bottom-1 w-0.5 -translate-x-1/2 rounded-full bg-ink-2/70"
+            style={{ left: `${corte * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="relative mt-1 h-4 text-xs text-ink-3" aria-hidden>
+        {cortes.map((corte) => (
+          <span key={corte} className="num absolute -translate-x-1/2" style={{ left: `${corte * 100}%` }}>
+            {Math.round(corte * 100)} %
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
-/** Fila superior de indicadores del periodo: demanda, real + avance, cumplimiento y semáforo. */
+/**
+ * Tira de indicadores del periodo: cumplimiento global (lo que decide), demanda y real por unidad
+ * de medida, y el semáforo, que además filtra la tabla. Ocupa poca altura para que la tabla
+ * empiece lo más arriba posible.
+ */
 export function SummaryCards({
   registros,
   registrosParaSemaforo,
@@ -66,122 +81,89 @@ export function SummaryCards({
       meses,
     ),
   }));
-  const rotulo = abarcaVariosAnios(meses) ? etiquetaMesAnio : etiquetaMes;
   const conRealCargado = registros.filter((r) => meses.some((mes) => r.reales[mes] !== undefined)).length;
 
   return (
     <section
       aria-label={`Indicadores del periodo ${etiquetaRango(meses)}`}
-      className="grid grid-cols-2 gap-3 xl:grid-cols-[1.35fr_1fr_1fr_1.1fr]"
+      className="grid divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface shadow-card lg:grid-cols-[minmax(18rem,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)] lg:divide-x lg:divide-y-0"
     >
-      {/* Demanda ------------------------------------------------------------ */}
-      <Tarjeta titulo="Total demanda pronosticada" className="col-span-2 sm:col-span-2 xl:col-span-1">
-        <div
-          className={cn(
-            "mt-2 grid gap-x-6 gap-y-4",
-            porUnidad.length > 1 ? "grid-cols-1 min-[420px]:grid-cols-2" : "grid-cols-1",
-          )}
-        >
-          {porUnidad.length === 0 ? (
-            <p className="num text-[1.75rem] leading-none font-semibold text-ink">–</p>
-          ) : (
-            porUnidad.map(({ unidad, registros: cantidad, resumen: r }) => {
-              const maximoMes = Math.max(...meses.map((mes) => r.porMes[mes].demanda), 0);
-              return (
-                <div key={unidad} className="min-w-0">
-                  <p className="flex items-baseline gap-1.5">
-                    <span
-                      className={cn(
-                        "num leading-none font-semibold tracking-tight text-ink",
-                        porUnidad.length > 1 ? "text-[1.5rem]" : "text-[1.75rem]",
-                      )}
-                    >
-                      {formatearNumero(r.demanda)}
-                    </span>
-                    <span className="text-xs font-semibold text-ink-2">{unidad}</span>
-                  </p>
-                  <p className="mt-1 text-xs text-ink-3">{cantidad} registros</p>
-                  <div className="mt-3 grid auto-cols-fr grid-flow-col gap-2">
-                    {meses.map((mes) => {
-                      const valor = r.porMes[mes].demanda;
-                      return (
-                        <div key={mes} title={`${nombreMes(mes)}: ${formatearNumero(valor)} ${unidad}`}>
-                          <p className="rotulo text-ink-3">{rotulo(mes)}</p>
-                          <p className="num text-xs font-medium text-ink">{formatearCompacto(valor)}</p>
-                          <div className="mt-1 h-1.5 w-full rounded-full bg-surface-3">
-                            <div
-                              className="h-full rounded-full bg-accent"
-                              style={{ width: `${maximoMes > 0 ? (valor / maximoMes) * 100 : 0}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Tarjeta>
-
-      {/* Real + avance ------------------------------------------------------- */}
-      <Tarjeta titulo="Real + avance" className="col-span-2 sm:col-span-1">
-        <p className="num mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[1.75rem] leading-none font-semibold tracking-tight text-ink">
-          {resumen.ratio === null
-            ? "–"
-            : porUnidad
-                .filter((u) => u.resumen.ratio !== null)
-                .map((u) => (
-                  <span key={u.unidad}>
-                    {formatearNumero(u.resumen.real)}
-                    <span className="ml-1.5 text-xs font-semibold text-ink-2">{u.unidad}</span>
-                  </span>
-                ))}
-        </p>
-        <p className="mt-1.5 text-xs text-ink-2">
-          {conRealCargado === 0 ? (
-            "Aún no hay despacho cargado en el periodo"
-          ) : (
-            <>
-              <span className="num font-semibold text-ink">{conRealCargado}</span> de {registros.length}{" "}
-              registros con despacho cargado
-            </>
-          )}
-        </p>
-        <p className="mt-auto pt-4 text-[11px] leading-snug text-ink-3">
-          Despacho de meses cerrados + avance del mes en curso. Se carga en la pestaña «Cargar real», con doble
-          clic en la tabla o importando un Excel.
-        </p>
-      </Tarjeta>
-
       {/* Cumplimiento --------------------------------------------------------- */}
-      <Tarjeta titulo="Cumplimiento global" className="col-span-2 sm:col-span-1">
-        <div className="mt-2 flex items-center gap-3">
-          <p
-            className={cn(
-              "num text-[1.75rem] leading-none font-semibold tracking-tight",
-              ESTILOS_ESTADO[resumen.estado].texto,
-            )}
-          >
-            {formatearPorcentaje(resumen.ratio)}
-          </p>
+      <div className="px-4 py-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="rotulo text-ink-2">Cumplimiento global</h3>
           <EstadoPastilla estado={resumen.estado} />
         </div>
-        <BarraCumplimiento estado={resumen.estado} ratio={resumen.ratio} className="mt-3 h-2" />
-        <p className="mt-2 text-xs text-ink-2">
+        <p
+          className={cn(
+            "num mt-1 text-[2.5rem] leading-none font-semibold tracking-tight",
+            ESTILOS_ESTADO[resumen.estado].texto,
+          )}
+        >
+          {formatearPorcentaje(resumen.ratio)}
+        </p>
+        <BarraConUmbrales estado={resumen.estado} ratio={resumen.ratio} />
+        <p className="text-xs text-ink-2">
           {resumen.ratio === null
             ? "Se calcula cuando haya real + avance cargado."
             : "Sobre los registros que ya reportan real."}
         </p>
-        <p className="mt-auto pt-3 text-[11px] text-ink-3">
-          Verde {REGLA_ESTADO.verde} · Amarillo {REGLA_ESTADO.amarillo} · Rojo {REGLA_ESTADO.rojo}
-        </p>
-      </Tarjeta>
+      </div>
 
-      {/* Semáforo (también filtra) ------------------------------------------- */}
-      <Tarjeta titulo="Semáforo · clic para filtrar" className="col-span-2 sm:col-span-2 xl:col-span-1">
-        <ul className="mt-2.5 flex flex-col gap-1">
+      {/* Demanda y real ------------------------------------------------------- */}
+      <div className="px-4 py-3.5">
+        <h3 className="rotulo text-ink-2">Demanda y real por unidad</h3>
+        {porUnidad.length === 0 ? (
+          <p className="num mt-2 text-2xl font-semibold text-ink">–</p>
+        ) : (
+          <table className="mt-1.5 w-full text-sm">
+            <thead>
+              <tr className="text-xs text-ink-3">
+                <th scope="col" className="py-1 text-left font-medium">
+                  <span className="sr-only">Unidad</span>
+                </th>
+                <th scope="col" className="py-1 text-right font-medium">
+                  Pronóstico
+                </th>
+                <th scope="col" className="py-1 text-right font-medium">
+                  Real + avance
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {porUnidad.map(({ unidad, registros: cantidad, resumen: r }) => (
+                <tr key={unidad} className="border-t border-line">
+                  <th scope="row" className="py-1.5 text-left font-semibold text-ink-2">
+                    {unidad}
+                    <span className="block text-xs font-normal text-ink-3">{cantidad} registros</span>
+                  </th>
+                  <td className="num py-1.5 text-right text-lg font-semibold text-ink">{formatearNumero(r.demanda)}</td>
+                  <td className="num py-1.5 text-right text-lg font-semibold text-ink">
+                    {r.ratio === null ? <span className="font-normal text-ink-3">–</span> : formatearNumero(r.real)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="mt-1.5 text-xs text-ink-2">
+          {conRealCargado === 0 ? (
+            <>
+              Aún no hay despacho cargado. Se carga en la pestaña <strong className="font-semibold">Cargar real</strong>.
+            </>
+          ) : (
+            <>
+              <span className="num font-semibold text-ink">{conRealCargado}</span> de {registros.length} registros con
+              despacho cargado
+            </>
+          )}
+        </p>
+      </div>
+
+      {/* Semáforo (también filtra) -------------------------------------------- */}
+      <div className="px-4 py-3.5">
+        <h3 className="rotulo text-ink-2">Semáforo · clic para filtrar</h3>
+        <ul className="mt-2 grid grid-cols-2 gap-1.5">
           {ESTADOS_FILTRABLES.map((estado) => {
             const activo = estadoFiltro === estado;
             const { punto, texto } = ESTILOS_ESTADO[estado];
@@ -191,23 +173,26 @@ export function SummaryCards({
                   type="button"
                   aria-pressed={activo}
                   onClick={() => alCambiarEstado(activo ? "" : estado)}
+                  title={`${ETIQUETAS_ESTADO[estado]}: ${REGLA_ESTADO[estado]}`}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left text-[13px] transition-colors",
-                    activo ? "bg-accent-soft ring-1 ring-accent" : "hover:bg-surface-2",
+                    "flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors",
+                    activo ? "border-accent bg-accent-soft" : "border-line hover:bg-surface-2",
                   )}
                 >
                   <span className={cn("size-2.5 shrink-0 rounded-full", punto)} aria-hidden />
-                  <span className={cn("font-medium", estado === "sin-real" ? "text-ink-2" : texto)}>
+                  <span className={cn("truncate font-medium", estado === "sin-real" ? "text-ink-2" : texto)}>
                     {ETIQUETAS_ESTADO[estado]}
                   </span>
-                  <span className="hidden text-xs text-ink-3 2xl:inline">{REGLA_ESTADO[estado]}</span>
                   <span className="num ml-auto font-semibold text-ink">{conteos[estado]}</span>
                 </button>
               </li>
             );
           })}
         </ul>
-      </Tarjeta>
+        <p className="mt-1.5 text-xs text-ink-3">
+          Verde {REGLA_ESTADO.verde} · Amarillo {REGLA_ESTADO.amarillo} · Rojo {REGLA_ESTADO.rojo}
+        </p>
+      </div>
     </section>
   );
 }
@@ -246,7 +231,7 @@ export function SelectorPeriodo({
             const elegido = periodos.find((p) => idDe(p) === evento.target.value);
             if (elegido) alElegirPeriodo(elegido);
           }}
-          className="h-9 cursor-pointer rounded-lg border border-line-strong bg-surface px-2.5 text-sm font-medium text-ink"
+          className="h-9 cursor-pointer rounded-lg border border-field bg-surface px-2.5 text-sm font-medium text-ink"
         >
           {periodos.map((p) => (
             <option key={idDe(p)} value={idDe(p)}>

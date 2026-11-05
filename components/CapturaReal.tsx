@@ -35,7 +35,7 @@ const POR_PAGINA = 60;
 
 const TH_BASE = "rotulo sticky top-0 z-10 border-b border-line-strong px-3 py-2";
 const CLASES_CAJA =
-  "num h-8 w-full rounded-md border border-line-strong bg-surface px-2 text-right text-sm text-ink placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
+  "num h-8 w-full rounded-md border border-field bg-surface px-2 text-right text-sm text-ink placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
 
 /**
  * Interpreta lo escrito en una caja de cantidad.
@@ -467,7 +467,7 @@ export function CapturaReal({
                           onKeyDown={(evento) => {
                             if (evento.key === "Enter") evento.currentTarget.blur();
                           }}
-                          className="h-8 w-full min-w-40 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+                          className="h-8 w-full min-w-40 rounded-md border border-field bg-surface px-2 text-sm text-ink placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
                         />
                       </td>
                     ) : null}

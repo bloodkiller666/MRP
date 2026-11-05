@@ -497,8 +497,7 @@ export function MRPApp() {
             );
           })}
         </nav>
-        <div className="border-b border-white/10" />
-      <div className="franja-via" aria-hidden="true" />
+        <div className="franja-via" aria-hidden="true" />
       </header>
 
       {/* ------------------------------ Contenido ----------------------------- */}
@@ -662,7 +661,7 @@ export function MRPApp() {
               "Cargando datos guardados…"
             )}
           </p>
-          <p>Origen: Base de datos de consumo MP Asfaltos · Oct 2026</p>
+          <p>Origen: Excel «Consumo MP Asfaltos», hoja Base de datos</p>
         </div>
       </footer>
 

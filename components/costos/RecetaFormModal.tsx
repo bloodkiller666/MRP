@@ -148,7 +148,7 @@ export function RecetaFormModal({ receta, gradoInicial, datos, insumosPorId, onC
                         </option>
                       ))}
                     </select>
-                    {vigente ? <p className="num mt-0.5 text-[11px] text-ink-3">{soles4(vigente.precio)} S/kg vigente</p> : null}
+                    {vigente ? <p className="num mt-0.5 text-xs text-ink-3">{soles4(vigente.precio)} S/kg vigente</p> : null}
                   </div>
                   <div className="flex items-center gap-1">
                     <Input

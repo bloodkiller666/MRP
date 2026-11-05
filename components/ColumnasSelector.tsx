@@ -52,14 +52,14 @@ export function ColumnasSelector({ ocultas, alAlternar, alMostrarTodas }: PropsC
 
       <div className="absolute right-0 z-30 mt-1.5 w-72 rounded-xl border border-line-strong bg-surface p-3 shadow-pop">
         <p className="rotulo text-ink-2">Columnas visibles</p>
-        <p className="mt-0.5 text-[11px] text-ink-3">
+        <p className="mt-0.5 text-xs text-ink-3">
           Ocultar no altera los totales ni el cumplimiento.
         </p>
 
         <div className="mt-3 flex max-h-72 flex-col gap-3 overflow-y-auto">
           {GRUPOS_COLUMNAS.map((grupo) => (
             <div key={grupo.titulo}>
-              <p className="mb-1 text-[11px] font-semibold text-ink-2">{grupo.titulo}</p>
+              <p className="mb-1 text-xs font-semibold text-ink-2">{grupo.titulo}</p>
               <div className="flex flex-col">
                 {grupo.columnas.map((columna) => (
                   <label
@@ -81,12 +81,12 @@ export function ColumnasSelector({ ocultas, alAlternar, alMostrarTodas }: PropsC
         </div>
 
         <div className="mt-3 flex items-center justify-between border-t border-line pt-2">
-          <span className="text-[11px] text-ink-3">Totales y acciones siempre visibles</span>
+          <span className="text-xs text-ink-3">Totales y acciones siempre visibles</span>
           <button
             type="button"
             onClick={alMostrarTodas}
             disabled={!hayOcultas}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <RotateCcw className="size-3" />
             Mostrar todas

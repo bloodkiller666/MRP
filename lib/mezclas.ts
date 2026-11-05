@@ -63,8 +63,9 @@ function lineaEmultec(detalle: string): string | null {
 }
 
 /**
- * Emulsión que corresponde al producto según su clima. Con clima templado (o departamento
- * desconocido) no hay regla: devuelve «» para que se complete a mano.
+ * Emulsión que corresponde al producto según su clima. Suministro tomó el clima templado como
+ * frío para estas reglas. Con un departamento desconocido no hay regla: devuelve «» para que
+ * se complete a mano.
  */
 function emulsionPorRegla(detalle: string, departamento: string): string {
   if (detalle.includes("ADHESOL")) return "EMUL-01";
@@ -75,7 +76,7 @@ function emulsionPorRegla(detalle: string, departamento: string): string {
   if (linea !== "CQS" && linea !== "CSS") return "";
 
   const clima = climaDe(departamento);
-  if (clima === "frio") return linea === "CQS" ? "EMUL-01" : "EMUL-02";
+  if (clima === "frio" || clima === "templado") return linea === "CQS" ? "EMUL-01" : "EMUL-02";
   if (clima === "calido") return linea === "CQS" ? "EMUL-05" : "EMUL-09";
   return "";
 }

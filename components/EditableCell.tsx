@@ -30,7 +30,7 @@ interface CeldaEditableProps {
  * - **Doble clic** (o `Enter` con la celda enfocada) entra en modo edición.
  * - `Enter` / blur guardan, `Escape` cancela.
  * - En celdas numéricas, escribir vacío limpia el valor y un texto no numérico
- *   se descarta para no perder el dato original.
+ *   se marca en rojo (Enter) o se descarta al salir, para no perder el dato original.
  */
 export function EditableCell({
   valor,
@@ -45,6 +45,7 @@ export function EditableCell({
 }: CeldaEditableProps) {
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState("");
+  const [invalido, setInvalido] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
 
   useEffect(() => {
@@ -57,11 +58,13 @@ export function EditableCell({
 
   const iniciarEdicion = () => {
     setBorrador(valor === undefined || valor === null ? "" : String(valor));
+    setInvalido(false);
     setEditando(true);
   };
 
   const cancelar = () => {
     setEditando(false);
+    setInvalido(false);
     setBorrador("");
   };
 
@@ -69,7 +72,11 @@ export function EditableCell({
     if (nuevo !== valor) alGuardar(nuevo);
   };
 
-  const guardar = () => {
+  /**
+   * `Enter` con un texto no numérico deja la celda abierta y la marca en rojo; al salir con el
+   * ratón o `Tab` se conserva el valor original (el cambio se descarta, pero no a escondidas).
+   */
+  const guardar = (alSalir = false) => {
     if (tipo === "numero") {
       const texto = borrador.trim();
       if (texto === "") {
@@ -77,7 +84,10 @@ export function EditableCell({
         cambiarSiDifiere(undefined);
       } else {
         const numero = parsearNumero(texto);
-        // Si no es un número válido, se descarta el cambio.
+        if (numero === undefined && !alSalir) {
+          setInvalido(true);
+          return;
+        }
         if (numero !== undefined) cambiarSiDifiere(numero);
       }
     } else {
@@ -85,6 +95,7 @@ export function EditableCell({
       if (texto !== (valor ?? "")) alGuardar(texto);
     }
     setEditando(false);
+    setInvalido(false);
   };
 
   const alTeclado = (evento: React.KeyboardEvent) => {
@@ -101,7 +112,8 @@ export function EditableCell({
 
   if (editando) {
     const clasesControl =
-      "h-full w-full min-w-24 border-2 border-accent bg-surface px-2 py-1.5 text-[13px] text-ink outline-none";
+      "h-full w-full min-w-24 border-2 bg-surface px-2 py-1.5 text-[13px] text-ink outline-none " +
+      (invalido ? "border-bad" : "border-accent");
     return (
       <td className={cn("border-b border-line p-0 align-middle", className)}>
         {tipo === "select" ? (
@@ -109,7 +121,7 @@ export function EditableCell({
             ref={inputRef as React.RefObject<HTMLSelectElement>}
             value={borrador}
             onChange={(evento) => setBorrador(evento.target.value)}
-            onBlur={guardar}
+            onBlur={() => guardar(true)}
             onKeyDown={alTeclado}
             className={clasesControl}
           >
@@ -124,9 +136,14 @@ export function EditableCell({
             ref={inputRef as React.RefObject<HTMLInputElement>}
             value={borrador}
             inputMode={tipo === "numero" ? "decimal" : undefined}
-            onChange={(evento) => setBorrador(evento.target.value)}
-            onBlur={guardar}
+            onChange={(evento) => {
+              setBorrador(evento.target.value);
+              setInvalido(false);
+            }}
+            onBlur={() => guardar(true)}
             onKeyDown={alTeclado}
+            aria-invalid={invalido || undefined}
+            title={invalido ? "Escribe solo un número, o pulsa Esc para conservar el valor." : undefined}
             className={cn(clasesControl, derecha && "num text-right")}
           />
         )}

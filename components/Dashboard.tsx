@@ -442,7 +442,7 @@ export function Dashboard({ registros, meses, alCargarVendedor }: DashboardProps
                           type="button"
                           onClick={() => alCargarVendedor(fila.etiqueta)}
                           title={`Cargar pronóstico y real de ${fila.etiqueta}`}
-                          className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent-soft"
+                          className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent-soft"
                         >
                           <ClipboardPenLine className="size-3.5" />
                           Cargar
@@ -471,7 +471,7 @@ export function Dashboard({ registros, meses, alCargarVendedor }: DashboardProps
                       />
                     ))}
                   </div>
-                  <p className="num mt-1 text-[11px] text-ink-3">
+                  <p className="num mt-1 text-xs text-ink-3">
                     {fila.ratio === null ? "Sin real cargado" : `${formatearNumero(fila.real)} despachado`} de{" "}
                     {formatearNumero(fila.demanda)} {unidad}
                   </p>
@@ -479,7 +479,7 @@ export function Dashboard({ registros, meses, alCargarVendedor }: DashboardProps
               );
             })}
           </ul>
-          <p className="mt-4 border-t border-line pt-3 text-[11px] text-ink-3">
+          <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">
             Marcas en {UMBRAL_AMARILLO * 100}% y {UMBRAL_VERDE * 100}%.{" "}
             {hayReal ? "" : "Carga el real en la pestaña «Cargar real» para ver el avance."}
           </p>
@@ -564,7 +564,7 @@ export function Dashboard({ registros, meses, alCargarVendedor }: DashboardProps
         </Panel>
       </div>
 
-      <p className="text-[11px] text-ink-3">
+      <p className="text-xs text-ink-3">
         Gráficos calculados sobre la vista actual ({registros.length} registro
         {registros.length === 1 ? "" : "s"}) · demanda total del periodo en {unidad}:{" "}
         <span className="num font-medium text-ink-2">

@@ -247,7 +247,7 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar, mesesPeriodo }
                         aria-pressed={marcado}
                         onClick={() => alternarMes(mes)}
                         className={cn(
-                          "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                          "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
                           marcado
                             ? "border-accent bg-accent-soft text-accent"
                             : "border-line-strong text-ink-3 hover:bg-surface-2",
@@ -270,7 +270,7 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar, mesesPeriodo }
                 {activas.map((columna) => (
                   <span
                     key={`${columna.indice}-${columna.encabezadoOriginal}`}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface-2 px-2.5 py-1 text-[11px]"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface-2 px-2.5 py-1 text-xs"
                   >
                     <span className="text-ink-2">{columna.encabezadoOriginal}</span>
                     <span className="text-ink-3">→</span>
