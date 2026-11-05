@@ -22,6 +22,68 @@ type Fila = [
   unidadMedida: string,
 ];
 
+/**
+ * «Tipo PEN» de cada fila, tomado de la hoja «Base de datos» del Excel de consumo de MP (NOV 2026 V1).
+ * Se cruzó por vendedor + cliente + producto + proyecto; las filas que ya no aparecen en ese
+ * Excel quedan sin dato (se completa en la tabla o al importar).
+ */
+const TIPO_PEN_SEMILLA: Record<number, string> = {
+  1: "PEN 120/150",
+  3: "PEN 60/70",
+  5: "PEN 120/150",
+  6: "AC30",
+  7: "PEN 60/70",
+  8: "AC30",
+  9: "AC30",
+  10: "AC30",
+  14: "AC30",
+  15: "AC30",
+  19: "PEN 60/70",
+  21: "PEN 120/150",
+  23: "AC30",
+  24: "AC30",
+  27: "AC30",
+  29: "PEN 60/70",
+  32: "PEN 60/70",
+  34: "AC30",
+  36: "PEN 120/150",
+  37: "AC30",
+  38: "AC30",
+  40: "AC30",
+  41: "PEN 60/70",
+  42: "AC30",
+  44: "PEN 60/70",
+  45: "AC30",
+  46: "PEN 60/70",
+  47: "AC30",
+  48: "AC30",
+  50: "AC30",
+  51: "AC30",
+  53: "PEN 60/70",
+  54: "AC30",
+  55: "AC30",
+  59: "AC30",
+  60: "AC30",
+  62: "PEN 60/70",
+  63: "PEN 60/70",
+  64: "PEN 60/70",
+  65: "AC30 50%",
+  66: "AC30",
+  69: "PEN 120/150",
+  70: "AC30",
+  71: "PEN 120/150",
+  74: "AC30 50%",
+  75: "AC30 50%",
+  76: "PEN 60/70",
+  77: "AC30 50%",
+  78: "AC30",
+  79: "AC30 50%",
+  80: "AC30",
+  81: "MC30",
+  82: "AC30",
+  83: "AC30",
+};
+
 function r(n: number, fila: Fila, proyecciones: Record<string, number>): RegistroMRP {
   const [propietario, departamento, cuenta, proyecto, detalleProducto, grupoLinea, refineria, unidadMedida] = fila;
   return {
@@ -35,6 +97,10 @@ function r(n: number, fila: Fila, proyecciones: Record<string, number>): Registr
     refineria,
     unidadMedida,
     tipoAplicacion: "",
+    tipoPen: TIPO_PEN_SEMILLA[n] ?? "",
+    emulsion: "",
+    polimero: "",
+    aditivo: "",
     proyecciones: migrarCantidades(proyecciones),
     reales: {},
   };

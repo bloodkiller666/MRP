@@ -28,6 +28,10 @@ const COLUMNAS_TEXTO: CampoTextoMRP[] = [
   "cuenta",
   "detalleProducto",
   "tipoAplicacion",
+  "emulsion",
+  "polimero",
+  "aditivo",
+  "tipoPen",
   "unidadMedida",
   "departamento",
   "proyecto",
@@ -46,6 +50,10 @@ const ANCHOS_TEXTO: Record<CampoTextoMRP, number> = {
   proyecto: 90,
   grupoLinea: 66,
   refineria: 52,
+  emulsion: 48,
+  polimero: 32,
+  aditivo: 60,
+  tipoPen: 48,
 };
 
 /** Colores del semáforo (RGB) para el texto de la columna de cumplimiento. */

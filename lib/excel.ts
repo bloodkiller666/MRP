@@ -75,6 +75,12 @@ const ALIAS_CAMPOS: Record<string, CampoTextoMRP | "probabilidad" | "comentario"
   tipoaplicacion: "tipoAplicacion",
   aplicacion: "tipoAplicacion",
   tipodeaplicacion: "tipoAplicacion",
+  tipopen: "tipoPen",
+  emul: "emulsion",
+  emulsion: "emulsion",
+  tipodeemulsion: "emulsion",
+  polimero: "polimero",
+  aditivo: "aditivo",
 };
 
 /** Decide a qué mes (`AAAA-MM`) corresponde un mes escrito sin año («Oct»). */
@@ -316,6 +322,10 @@ export function mapearMatriz(
       refineria: "",
       unidadMedida: "",
       tipoAplicacion: "",
+      tipoPen: "",
+      emulsion: "",
+      polimero: "",
+      aditivo: "",
       proyecciones: {},
       reales: {},
     };
@@ -339,6 +349,11 @@ export function mapearMatriz(
         }
       } else if (campo === "comentario") {
         registro.comentario = parsearTexto(valor) || undefined;
+      } else if (campo === "emulsion" || campo === "polimero" || campo === "aditivo" || campo === "tipoPen") {
+        // El Excel escribe 0 / «Pendiente» donde aún no hay mezcla: queda vacío para que mande la regla.
+        const texto = parsearTexto(valor);
+        const vacio = texto === "0" || /^(pendiente|por definir)$/i.test(texto);
+        registro[campo] = vacio ? "" : texto.replace(/^EMUL\s+(\d+)$/i, "EMUL-$1").toUpperCase();
       } else {
         registro[campo as CampoTextoMRP] = parsearTexto(valor);
       }

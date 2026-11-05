@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, EyeOff, Inbox, Pencil, Trash2 } from "
 import { useMemo, useState } from "react";
 
 import { CAMPOS_TEXTO, ETIQUETAS_CAMPO, TIPOS_APLICACION, UNIDADES_MEDIDA } from "@/lib/constants";
+import { ADITIVOS, EMULSIONES, POLIMEROS, TIPOS_PEN } from "@/lib/mezclas";
 import {
   cumplimientoRegistro,
   formatearNumero,
@@ -58,6 +59,18 @@ const ANCHO_TEXTO: Partial<Record<CampoTextoMRP, string>> = {
   proyecto: "max-w-[16rem]",
   grupoLinea: "max-w-[10rem]",
   refineria: "max-w-[8rem]",
+  emulsion: "max-w-[8rem]",
+  polimero: "max-w-[5rem]",
+  aditivo: "max-w-[10rem]",
+  tipoPen: "max-w-[8rem]",
+};
+
+/** Campos de la mezcla: se eligen de una lista, con «Por definir» cuando no hay regla ni dato. */
+const LISTA_MEZCLA: Partial<Record<CampoTextoMRP, string[]>> = {
+  emulsion: EMULSIONES,
+  polimero: POLIMEROS,
+  aditivo: ADITIVOS,
+  tipoPen: TIPOS_PEN,
 };
 
 const clasesTh =
@@ -287,6 +300,22 @@ export function MRPTable({
                   {camposVisibles.map((campo, indice) => {
                     const claseBorde =
                       indice === 0 ? cn("border-l-[3px]", bordeEstado(c.estado)) : undefined;
+
+                    const listaMezcla = LISTA_MEZCLA[campo];
+                    if (listaMezcla) {
+                      return (
+                        <EditableCell
+                          key={campo}
+                          valor={registro[campo]}
+                          tipo="select"
+                          opciones={["", ...unirOpciones(listaMezcla, registro[campo])]}
+                          vacio="Por definir"
+                          anchoTexto={ANCHO_TEXTO[campo]}
+                          className={claseBorde}
+                          alGuardar={(valor) => alActualizarCampo(registro.id, campo, String(valor ?? ""))}
+                        />
+                      );
+                    }
 
                     if (campo === "unidadMedida" || campo === "tipoAplicacion") {
                       return (

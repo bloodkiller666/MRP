@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCcw,
   Route,
+  Scale,
   Table2,
   Trash2,
   Upload,
@@ -30,6 +31,7 @@ import { MRPTable } from "@/components/MRPTable";
 import { PeriodoModal } from "@/components/PeriodoModal";
 import { RegistroFormModal } from "@/components/RegistroFormModal";
 import { ReportModal } from "@/components/ReportModal";
+import { TasaConversionesModal } from "@/components/TasaConversionesModal";
 import { SelectorPeriodo, SummaryCards } from "@/components/SummaryCards";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useCatalogo } from "@/hooks/use-catalogo";
@@ -42,7 +44,8 @@ import {
   ETIQUETAS_ESTADO,
   FILTROS_INICIALES,
 } from "@/lib/constants";
-import { convertirATM, desdeTM } from "@/lib/conversion";
+import { convertirACisternas, convertirATM, desdeCisternas, desdeTM } from "@/lib/conversion";
+import { conMezcla } from "@/lib/mezclas";
 import { exportarRegistrosExcel } from "@/lib/excel";
 import {
   combinarOpciones,
@@ -80,7 +83,7 @@ const clasesBotonCabecera =
  */
 export function MRPApp() {
   const {
-    registros,
+    registros: registrosGuardados,
     listo,
     importarCombinando,
     agregar,
@@ -95,6 +98,9 @@ export function MRPApp() {
     vaciar,
   } = useMrpStore();
 
+  /** Los campos de mezcla vacíos toman el valor de la regla (lib/mezclas.ts); lo escrito a mano manda. */
+  const registros = useMemo(() => registrosGuardados.map(conMezcla), [registrosGuardados]);
+
   const { catalogo, registrarVarios, restaurar: restaurarCatalogo } = useCatalogo();
 
   const { ocultas, alternar: alternarColumna, mostrarTodas: mostrarTodasColumnas } = useColumnas();
@@ -108,11 +114,12 @@ export function MRPApp() {
   const [soloConDatos, setSoloConDatos] = useState(false);
   const [modalPeriodo, setModalPeriodo] = useState(false);
   /** «original» muestra cada UM por separado; «tm» lo convierte todo a toneladas con las fórmulas del Excel. */
-  const [modoUnidad, setModoUnidad] = useState<"original" | "tm">("original");
+  const [modoUnidad, setModoUnidad] = useState<"original" | "tm" | "cisternas">("original");
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoCumplimiento | "">("");
   const [vista, setVista] = useState<Vista>("seguimiento");
   const [modalImportar, setModalImportar] = useState(false);
   const [modalReporte, setModalReporte] = useState(false);
+  const [modalTasas, setModalTasas] = useState(false);
   const [modalFormulario, setModalFormulario] = useState(false);
   const [registroEditando, setRegistroEditando] = useState<RegistroMRP | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -168,12 +175,17 @@ export function MRPApp() {
     [registrosParaSemaforo, estadoFiltro, meses],
   );
 
-  const enTM = modoUnidad === "tm";
+  const enTM = modoUnidad !== "original";
 
   /** Lo que se ve y se exporta: los registros filtrados, en su UM o convertidos a TM. */
   const registrosMostrados = useMemo(
-    () => (enTM ? convertirATM(registrosFiltrados) : registrosFiltrados),
-    [enTM, registrosFiltrados],
+    () =>
+      modoUnidad === "tm"
+        ? convertirATM(registrosFiltrados)
+        : modoUnidad === "cisternas"
+          ? convertirACisternas(registrosFiltrados)
+          : registrosFiltrados,
+    [modoUnidad, registrosFiltrados],
   );
 
   /**
@@ -289,14 +301,15 @@ export function MRPApp() {
   const aUnidadOriginal = (id: string, valor?: number) => {
     if (valor === undefined || !enTM) return valor;
     const original = registros.find((r) => r.id === id);
-    return original ? desdeTM(original, valor) : valor;
+    if (!original) return valor;
+    return modoUnidad === "cisternas" ? desdeCisternas(original, valor) : desdeTM(original, valor);
   };
   const editarProyeccion = (id: string, mes: MesKey, valor?: number) =>
     actualizarProyeccion(id, mes, aUnidadOriginal(id, valor));
   const editarReal = (id: string, mes: MesKey, valor?: number) => actualizarReal(id, mes, aUnidadOriginal(id, valor));
   const editarCampo = (id: string, campo: CampoTextoMRP, valor: string) => {
     if (enTM && campo === "unidadMedida") {
-      mostrarAviso("En la vista TM no se cambia la unidad: vuelve a «UM original» para editarla.");
+      mostrarAviso("En esta vista no se cambia la unidad: vuelve a «UM original» para editarla.");
       return;
     }
     actualizarCampo(id, campo, valor);
@@ -427,6 +440,12 @@ export function MRPApp() {
                   deshabilitada: sinResultados,
                 },
                 {
+                  etiqueta: "Tasa de conversiones",
+                  detalle: "Materia prima por cisterna (kg, TM, galones)",
+                  icono: <Scale className="size-4" />,
+                  alElegir: () => setModalTasas(true),
+                },
+                {
                   etiqueta: "Restaurar datos originales",
                   detalle: "Vuelve a los 85 registros del Excel",
                   icono: <RotateCcw className="size-4" />,
@@ -479,6 +498,7 @@ export function MRPApp() {
           })}
         </nav>
         <div className="border-b border-white/10" />
+      <div className="franja-via" aria-hidden="true" />
       </header>
 
       {/* ------------------------------ Contenido ----------------------------- */}
@@ -509,6 +529,7 @@ export function MRPApp() {
                 [
                   ["original", "UM original", "Cada unidad (GLN, KG…) por separado"],
                   ["tm", "TM", "Todo en toneladas, con las fórmulas de conversión del Excel"],
+                  ["cisternas", "Cisternas", "Todo en cisternas de 8 000 galones, como el encabezado naranja del Excel"],
                 ] as const
               ).map(([clave, etiqueta, ayuda]) => (
                 <button
@@ -541,10 +562,16 @@ export function MRPApp() {
           />
           </div>
         </div>
-        {enTM ? (
+        {modoUnidad === "tm" ? (
           <p className="-mt-2 text-xs text-ink-3">
             Vista en toneladas (TM), con las fórmulas del Excel: GLN × 3,785 ÷ 1000 · KG ÷ 1000 · asfaltos modificados
             × 95 % · emulsión × 65 %. Las unidades sin conversión (p. ej. UND) se muestran aparte.
+          </p>
+        ) : null}
+        {modoUnidad === "cisternas" ? (
+          <p className="-mt-2 text-xs text-ink-3">
+            Vista en cisternas de 8 000 galones: GLN ÷ 8000 · KG ÷ 8000 ÷ 3,785 · TN × 1000 ÷ 8000 ÷ 3,785. Las unidades
+            sin conversión (p. ej. UND) se muestran aparte.
           </p>
         ) : null}
 
@@ -699,6 +726,8 @@ export function MRPApp() {
           onQuitar={quitarPeriodo}
         />
       ) : null}
+
+      {modalTasas ? <TasaConversionesModal abierto onCerrar={() => setModalTasas(false)} /> : null}
 
       {modalReporte ? (
         <ReportModal

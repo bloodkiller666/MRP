@@ -34,6 +34,14 @@ export interface RegistroMRP {
   refineria: string;
   unidadMedida: string;
   tipoAplicacion: string;
+  /** Tipo de PEN base (AC30, PEN 60/70…). Define, por ejemplo, el aditivo. */
+  tipoPen: string;
+  /** Tipo de emulsión (EMUL-01, GENAMIN TAP…). Vacío = lo dicta la regla de `lib/mezclas.ts`. */
+  emulsion: string;
+  /** Polímero (SBR / SBS). Vacío = lo dicta la regla. */
+  polimero: string;
+  /** Aditivo (aceite crudo de palma…). Vacío = lo dicta la regla. */
+  aditivo: string;
   /** Pronóstico de demanda por mes. */
   proyecciones: CantidadesMes;
   /** Despacho real (meses cerrados) + avance (mes en curso). */

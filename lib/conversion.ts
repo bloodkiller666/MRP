@@ -58,16 +58,68 @@ function escalar(cantidades: CantidadesMes, factor: number): CantidadesMes {
  * Es solo de lectura: el `id` se conserva para poder escribir de vuelta con {@link desdeTM}.
  */
 export function convertirATM(registros: RegistroMRP[]): RegistroMRP[] {
+  return convertirCon(registros, factorATM, UNIDAD_TM);
+}
+
+function convertirCon(
+  registros: RegistroMRP[],
+  factorDe: (registro: RegistroMRP) => number | null,
+  unidad: string,
+): RegistroMRP[] {
   return registros.map((registro) => {
-    const factor = factorATM(registro);
+    const factor = factorDe(registro);
     if (factor === null) return registro;
     return {
       ...registro,
-      unidadMedida: UNIDAD_TM,
+      unidadMedida: unidad,
       proyecciones: escalar(registro.proyecciones, factor),
       reales: escalar(registro.reales, factor),
     };
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Cisternas                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export const UNIDAD_CISTERNAS = "Cisternas";
+
+/** Una cisterna lleva 8 000 galones. */
+export const GALONES_POR_CISTERNA = 8000;
+
+/**
+ * Factor de la unidad de venta a cisternas, igual que el encabezado naranja del Excel
+ * (hoja «Base de datos»):
+ *
+ *   KG  → ÷ 8000 ÷ 3,785
+ *   GLN → ÷ 8000
+ *   TN  → × 1000 ÷ 8000 ÷ 3,785
+ *
+ * A diferencia de las TM, aquí no se aplica el factor de asfaltos modificados ni de emulsión.
+ */
+export function factorACisternas(registro: Pick<RegistroMRP, "unidadMedida">): number | null {
+  switch (registro.unidadMedida.trim().toUpperCase()) {
+    case "GLN":
+      return 1 / GALONES_POR_CISTERNA;
+    case "KG":
+      return 1 / GALONES_POR_CISTERNA / LITROS_POR_GALON;
+    case "TN":
+    case "TM":
+      return 1000 / GALONES_POR_CISTERNA / LITROS_POR_GALON;
+    default:
+      return null;
+  }
+}
+
+/** Vista en cisternas; las UM sin conversión (p. ej. UND) se dejan como están. */
+export function convertirACisternas(registros: RegistroMRP[]): RegistroMRP[] {
+  return convertirCon(registros, factorACisternas, UNIDAD_CISTERNAS);
+}
+
+/** Pasa una cantidad escrita en cisternas a la unidad original del registro. */
+export function desdeCisternas(original: RegistroMRP, valorCisternas: number): number {
+  const factor = factorACisternas(original);
+  return factor === null || factor === 0 ? valorCisternas : Math.round((valorCisternas / factor) * 100) / 100;
 }
 
 /** Pasa una cantidad escrita en TM a la unidad original del registro (inversa de la conversión). */

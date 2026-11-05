@@ -168,6 +168,7 @@ export function CostosApp() {
           ))}
         </nav>
         <div className="border-b border-white/10" />
+      <div className="franja-via" aria-hidden="true" />
       </header>
 
       {/* ------------------------------ Contenido ----------------------------- */}

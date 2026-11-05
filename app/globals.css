@@ -3,8 +3,9 @@
 /*
  * Sistema de diseño de la aplicación MRP.
  *
- * Paleta corporativa: azul marino/índigo profundo con un único acento índigo, y tres colores de estado (verde / ámbar / rojo)
- * reservados exclusivamente para el semáforo de cumplimiento.
+ * Identidad: la de una obra vial. Neutros de grafito y concreto (el color del betún y del
+ * pavimento), un único acento azul de señalización vial y una franja amarilla de eje de calzada
+ * como detalle de marca en la cabecera. Verde / ámbar / rojo quedan reservados al semáforo.
  *
  * El modo oscuro se activa con la clase `.dark` en `<html>` (no con
  * `prefers-color-scheme`), para que el interruptor de la barra superior mande.
@@ -16,27 +17,29 @@
 :root {
   color-scheme: light;
 
-  --canvas: #f2f4fa;
+  --canvas: #ebeeef;
   --surface: #ffffff;
-  --surface-2: #f7f8fc;
-  --surface-3: #eaedf6;
-  --line: #e0e4ef;
-  --line-strong: #c6cddf;
+  --surface-2: #f5f7f7;
+  --surface-3: #e3e8e9;
+  --line: #d6dcde;
+  --line-strong: #b9c2c5;
 
-  --ink: #0e1630;
-  --ink-2: #444f6f;
-  --ink-3: #65708d;
+  --ink: #14191c;
+  --ink-2: #414b50;
+  --ink-3: #5c676c;
 
-  --chrome: #0f1a3d;
-  --chrome-2: #1b2a63;
-  --chrome-line: #2b3c7a;
-  --chrome-ink: #eef1fc;
-  --chrome-ink-2: #a9b5da;
+  --chrome: #171d20;
+  --chrome-2: #232b2f;
+  --chrome-line: #333d42;
+  --chrome-ink: #f1f4f4;
+  --chrome-ink-2: #a3b0b4;
 
-  --accent: #3b4fd8;
-  --accent-hover: #2d3eb8;
-  --accent-soft: #e8ebfd;
+  --accent: #006b86;
+  --accent-hover: #005469;
+  --accent-soft: #dcf0f5;
   --accent-ink: #ffffff;
+
+  --marca: #f4c430;
 
   --ok: #0c7a54;
   --ok-soft: #e0f5ec;
@@ -48,45 +51,47 @@
   --bad-soft: #fde8e9;
   --bad-line: #f0b1b5;
 
-  /* Gráficos: rampa ordinal de un solo tono índigo. */
-  --viz-m1: #a8b5f6;
-  --viz-m2: #5a6de8;
-  --viz-m3: #27318f;
-  --viz-bar: #5a6de8;
-  --viz-real: #3444c2;
-  --viz-track: #e3e7f4;
-  --viz-grid: #e7eaf4;
+  /* Gráficos: rampa ordinal de un solo tono azul señal. */
+  --viz-m1: #9fd0dd;
+  --viz-m2: #3d9bb5;
+  --viz-m3: #0b4a5e;
+  --viz-bar: #3d9bb5;
+  --viz-real: #00566d;
+  --viz-track: #dde5e7;
+  --viz-grid: #e3e9ea;
 
-  --radius: 10px;
-  --shadow-card: 0 1px 2px rgb(15 26 61 / 0.05), 0 4px 14px -6px rgb(15 26 61 / 0.10);
-  --shadow-pop: 0 12px 32px -8px rgb(15 26 61 / 0.28);
-  --chrome-grad: linear-gradient(135deg, #0f1a3d 0%, #18276a 55%, #2a3aa8 130%);
+  --radius: 8px;
+  --shadow-card: 0 1px 2px rgb(20 25 28 / 0.06), 0 3px 10px -6px rgb(20 25 28 / 0.12);
+  --shadow-pop: 0 12px 32px -8px rgb(20 25 28 / 0.30);
+  --chrome-grad: linear-gradient(180deg, #1c2326 0%, #171d20 100%);
 }
 
 .dark {
   color-scheme: dark;
 
-  --canvas: #090e20;
-  --surface: #111836;
-  --surface-2: #161f42;
-  --surface-3: #1f2a58;
-  --line: #243060;
-  --line-strong: #37467f;
+  --canvas: #0f1315;
+  --surface: #171d20;
+  --surface-2: #1c2326;
+  --surface-3: #263034;
+  --line: #2b363a;
+  --line-strong: #3f4d52;
 
-  --ink: #e9edfc;
-  --ink-2: #aab5d9;
-  --ink-3: #8090b8;
+  --ink: #eaf0f1;
+  --ink-2: #aebbbf;
+  --ink-3: #8798a0;
 
-  --chrome: #070b1a;
-  --chrome-2: #131c42;
-  --chrome-line: #222e60;
-  --chrome-ink: #eef1fc;
-  --chrome-ink-2: #93a1cf;
+  --chrome: #0b0f10;
+  --chrome-2: #151b1d;
+  --chrome-line: #263034;
+  --chrome-ink: #f1f4f4;
+  --chrome-ink-2: #91a0a5;
 
-  --accent: #8d9cff;
-  --accent-hover: #a8b4ff;
-  --accent-soft: #1d2866;
-  --accent-ink: #090e2a;
+  --accent: #5cc3dc;
+  --accent-hover: #86d5e8;
+  --accent-soft: #11313a;
+  --accent-ink: #06161b;
+
+  --marca: #f4c430;
 
   --ok: #43d19c;
   --ok-soft: #0e3024;
@@ -98,17 +103,17 @@
   --bad-soft: #401a1f;
   --bad-line: #7e2f37;
 
-  --viz-m1: #3a4bb8;
-  --viz-m2: #7f8fff;
-  --viz-m3: #c6cdff;
-  --viz-bar: #7f8fff;
-  --viz-real: #aab5ff;
-  --viz-track: #232f60;
-  --viz-grid: #1f2a54;
+  --viz-m1: #1f5566;
+  --viz-m2: #4fb0c9;
+  --viz-m3: #b7e4ef;
+  --viz-bar: #4fb0c9;
+  --viz-real: #8fd6e8;
+  --viz-track: #26343a;
+  --viz-grid: #222d31;
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px -8px rgb(0 0 0 / 0.55);
   --shadow-pop: 0 14px 36px -8px rgb(0 0 0 / 0.7);
-  --chrome-grad: linear-gradient(135deg, #070b1a 0%, #0f1740 60%, #1a2766 130%);
+  --chrome-grad: linear-gradient(180deg, #0f1415 0%, #0b0f10 100%);
 }
 
 @theme inline {
@@ -144,12 +149,12 @@
   --color-bad-soft: var(--bad-soft);
   --color-bad-line: var(--bad-line);
 
-  --font-sans: var(--font-plex-sans), "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-barlow), "Segoe UI", system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
 html {
-  font-size: 15px;
+  font-size: 15.5px;
 }
 
 body {
@@ -180,6 +185,16 @@ body {
     background: var(--chrome-grad);
   }
 
+  /*
+   * Franja de eje de calzada: raya amarilla discontinua bajo la cabecera. Es la única marca
+   * decorativa de la interfaz; el resto del color es funcional.
+   */
+  .franja-via {
+    height: 4px;
+    background: repeating-linear-gradient(90deg, var(--marca) 0 28px, transparent 28px 48px);
+    opacity: 0.9;
+  }
+
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
@@ -195,10 +210,9 @@ body {
 
   /* Rótulo pequeño en mayúsculas, usado en cabeceras y etiquetas. */
   .rotulo {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    letter-spacing: 0.02em;
   }
 }
 

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Barlow, IBM_Plex_Mono } from "next/font/google";
 
 import { SCRIPT_TEMA_INICIAL } from "@/lib/tema-store";
 
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({
-  variable: "--font-plex-sans",
+const barlow = Barlow({
+  variable: "--font-barlow",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // `dark`) antes de que React hidrate, así que la diferencia es intencional.
     <html
       lang="es"
-      className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${barlow.variable} ${plexMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

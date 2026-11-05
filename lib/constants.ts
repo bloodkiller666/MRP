@@ -5,6 +5,7 @@ import type {
   EstadoCumplimiento,
   FiltrosMRP,
 } from "./types";
+import { ADITIVOS, EMULSIONES, POLIMEROS, TIPOS_PEN } from "./mezclas";
 
 /** Etiquetas legibles de cada campo de texto del registro. */
 export const ETIQUETAS_CAMPO: Record<CampoTextoMRP, string> = {
@@ -17,6 +18,10 @@ export const ETIQUETAS_CAMPO: Record<CampoTextoMRP, string> = {
   refineria: "Refinería",
   unidadMedida: "UM",
   tipoAplicacion: "Tipo de aplicación",
+  tipoPen: "Tipo de PEN",
+  emulsion: "Tipo de emulsión",
+  polimero: "Polímero",
+  aditivo: "Aditivo",
 };
 
 /** Orden de los campos de texto en tablas, formularios y exportaciones. */
@@ -25,6 +30,10 @@ export const CAMPOS_TEXTO: CampoTextoMRP[] = [
   "cuenta",
   "detalleProducto",
   "tipoAplicacion",
+  "emulsion",
+  "polimero",
+  "aditivo",
+  "tipoPen",
   "unidadMedida",
   "departamento",
   "proyecto",
@@ -46,6 +55,9 @@ export const COLUMNAS_FILTRO_EXTRA: CampoTextoMRP[] = [
   "grupoLinea",
   "refineria",
   "unidadMedida",
+  "emulsion",
+  "polimero",
+  "aditivo",
 ];
 
 /** Catálogos usados como sugerencia en los formularios (el usuario puede escribir otro). */
@@ -103,6 +115,7 @@ export const COLUMNAS_OCULTABLES: ColumnaTabla[] = [...CAMPOS_TEXTO];
 
 /** Columnas que arrancan ocultas la primera vez (la vista se centra en lo comercial). */
 export const COLUMNAS_OCULTAS_INICIALES: ColumnaTabla[] = [
+  "tipoPen",
   "departamento",
   "proyecto",
   "grupoLinea",
@@ -117,6 +130,10 @@ export const GRUPOS_COLUMNAS: ReadonlyArray<{
   {
     titulo: "Seguimiento comercial",
     columnas: ["propietario", "cuenta", "detalleProducto", "tipoAplicacion", "unidadMedida"],
+  },
+  {
+    titulo: "Mezcla del producto",
+    columnas: ["emulsion", "polimero", "aditivo", "tipoPen"],
   },
   {
     titulo: "Datos de la obra y del producto",
@@ -138,6 +155,10 @@ export const CATALOGO_SEMILLA: CatalogoMRP = {
   refineria: [...REFINERIAS],
   unidadMedida: [...UNIDADES_MEDIDA],
   tipoAplicacion: [...TIPOS_APLICACION],
+  tipoPen: [...TIPOS_PEN],
+  emulsion: [...EMULSIONES],
+  polimero: [...POLIMEROS],
+  aditivo: [...ADITIVOS],
 };
 
 /** Estado inicial de los filtros (todos vacíos = sin filtro). */
@@ -151,6 +172,10 @@ export const FILTROS_INICIALES: FiltrosMRP = {
   refineria: "",
   unidadMedida: "",
   tipoAplicacion: "",
+  tipoPen: "",
+  emulsion: "",
+  polimero: "",
+  aditivo: "",
 };
 
 /* -------------------------------------------------------------------------- */
@@ -184,6 +209,7 @@ export const CATALOGO_STORAGE_KEY = "mrp:catalogo:v2";
 export const TEMA_STORAGE_KEY = "mrp:tema";
 export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v2";
 export const PERIODOS_STORAGE_KEY = "mrp:periodos:v1";
+export const TASAS_STORAGE_KEY = "mrp:tasas:v1";
 
 /** Leyenda mostrada en el pie de la tabla y en las exportaciones. */
 export const ETIQUETA_TOTAL = "TOTAL";

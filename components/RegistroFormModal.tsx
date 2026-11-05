@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarRange, Package, Save, UserRound } from "lucide-r
 import { useState, type ReactNode } from "react";
 
 import { CAMPOS_TEXTO, ETIQUETAS_CAMPO } from "@/lib/constants";
+import { mezclaPorRegla } from "@/lib/mezclas";
 import { formatearNumero } from "@/lib/mrp-utils";
 import { abarcaVariosAnios, anioDeMes, etiquetaRango, nombreMes } from "@/lib/periodos";
 import type { CampoTextoMRP, CantidadesMes, MesKey, RegistroMRP } from "@/lib/types";
@@ -42,6 +43,10 @@ const SECCION_PRODUCTO: CampoTextoMRP[] = [
   "unidadMedida",
   "grupoLinea",
   "refineria",
+  "tipoPen",
+  "emulsion",
+  "polimero",
+  "aditivo",
 ];
 
 /** Campos obligatorios y su mensaje de error. */
@@ -169,6 +174,14 @@ export function RegistroFormModal({
       return;
     }
 
+    // Si el valor coincide con la regla se guarda vacío: así sigue a la regla si cambia el producto.
+    const regla = mezclaPorRegla({
+      detalleProducto: borrador.detalleProducto,
+      departamento: borrador.departamento,
+      tipoPen: borrador.tipoPen,
+    });
+    const propio = (valor: string, deRegla: string) => (valor.trim() === deRegla ? "" : valor.trim());
+
     onGuardar({
       propietario: borrador.propietario.trim(),
       departamento: borrador.departamento.trim(),
@@ -179,6 +192,10 @@ export function RegistroFormModal({
       refineria: borrador.refineria.trim(),
       unidadMedida: borrador.unidadMedida.trim(),
       tipoAplicacion: borrador.tipoAplicacion.trim(),
+      tipoPen: borrador.tipoPen.trim(),
+      emulsion: propio(borrador.emulsion, regla.emulsion),
+      polimero: propio(borrador.polimero, regla.polimero),
+      aditivo: propio(borrador.aditivo, regla.aditivo),
       proyecciones: leerMeses("pron"),
       reales: leerMeses("real"),
     });
