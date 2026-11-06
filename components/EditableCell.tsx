@@ -17,6 +17,8 @@ interface CeldaEditableProps {
   alineacion?: "izquierda" | "derecha";
   /** Texto cuando la celda está vacía (por defecto «–» / «—»). */
   vacio?: string;
+  /** Muestra el valor como una insignia (para códigos cortos: EMUL-01, SBS…). */
+  insignia?: boolean;
   /** Texto de ayuda al pasar el cursor. */
   titulo?: string;
   /** Clase de ancho máximo del texto (se trunca con «…»). */
@@ -39,6 +41,7 @@ export function EditableCell({
   opciones,
   alineacion = "izquierda",
   vacio,
+  insignia,
   titulo = "Doble clic para editar",
   anchoTexto = "max-w-[18rem]",
   className,
@@ -175,6 +178,16 @@ export function EditableCell({
         <span className="text-ink-3">{vacio ?? (derecha ? "–" : "—")}</span>
       ) : tipo === "numero" ? (
         formatearNumero(valor as number)
+      ) : insignia ? (
+        <span
+          className={cn(
+            "inline-block max-w-full truncate rounded-md bg-surface-3 px-1.5 py-0.5 align-middle text-xs leading-4 font-semibold text-ink-2",
+            anchoTexto,
+          )}
+          title={String(valor)}
+        >
+          {valor}
+        </span>
       ) : (
         <span className={cn("block truncate", anchoTexto)} title={String(valor)}>
           {valor}

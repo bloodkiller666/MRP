@@ -43,8 +43,8 @@ interface Orden {
 
 /** Posición fija a la derecha de las tres columnas de cierre (junto a «Acciones», 4 rem). */
 const POS_CUMPL = "sticky right-16";
-const POS_REAL = "sticky right-[13.5rem]";
-const POS_DEMANDA = "sticky right-[19.5rem]";
+const POS_REAL = "sticky right-[13rem]";
+const POS_DEMANDA = "sticky right-[21.5rem] shadow-[-8px_0_12px_-10px_rgb(0_0_0/0.4)]";
 const CELDA_CIERRE = "z-[5] border-b border-line bg-surface-2 px-3 py-2 text-[13px]";
 const ALTO_PIE = 2.5;
 const PIE_CIERRE = "z-20 h-10 border-t border-line-strong bg-chrome px-3 py-0 text-chrome-ink";
@@ -75,8 +75,8 @@ const LISTA_MEZCLA: Partial<Record<CampoTextoMRP, string[]>> = {
 
 /** Cliente: columna fija a la izquierda (14 rem en total) para no perder de qué fila son las cifras. */
 const ANCHO_CLIENTE = "w-[14rem] min-w-[14rem] max-w-[14rem]";
-const PIN_CLIENTE_TD = cn("sticky left-0 z-[5] border-r border-line bg-surface", ANCHO_CLIENTE);
-const PIN_CLIENTE_TH = cn("left-0 z-20! border-r border-line", ANCHO_CLIENTE);
+const PIN_CLIENTE_TD = cn("sticky left-0 z-[5] bg-surface shadow-[inset_-1px_0_0_var(--line),8px_0_12px_-10px_rgb(0_0_0/0.4)]", ANCHO_CLIENTE);
+const PIN_CLIENTE_TH = cn("left-0 z-20! shadow-[inset_-1px_0_0_var(--line),8px_0_12px_-10px_rgb(0_0_0/0.4)]", ANCHO_CLIENTE);
 
 /** Orden en pantalla: primero lo que identifica la fila (cliente y producto). */
 const ORDEN_TABLA: CampoTextoMRP[] = [
@@ -276,14 +276,14 @@ export function MRPTable({
                 clave="demanda"
                 orden={orden}
                 alOrdenar={alOrdenar}
-                posicion={`${POS_DEMANDA} w-24 min-w-24 border-l border-line-strong`}
+                posicion={`${POS_DEMANDA} w-32 min-w-32 border-l border-line-strong`}
               />
               <CabeceraSimple
                 etiqueta="Real + avance"
                 clave="real"
                 orden={orden}
                 alOrdenar={alOrdenar}
-                posicion={`${POS_REAL} w-24 min-w-24`}
+                posicion={`${POS_REAL} w-[8.5rem] min-w-[8.5rem]`}
               />
               <CabeceraSimple
                 etiqueta="Cumplimiento"
@@ -291,7 +291,7 @@ export function MRPTable({
                 orden={orden}
                 alOrdenar={alOrdenar}
                 izquierda
-                posicion={`${POS_CUMPL} w-[9.5rem] min-w-[9.5rem]`}
+                posicion={`${POS_CUMPL} w-36 min-w-36`}
               />
             </tr>
           </thead>
@@ -309,7 +309,7 @@ export function MRPTable({
               </tr>
             ) : (
               filas.map(({ registro, c }) => (
-                <tr key={registro.id} className="group">
+                <tr key={registro.id} className="group fila-datos">
                   {camposVisibles.map((campo, indice) => {
                     const claseBorde =
                       indice === 0 ? cn("border-l-[3px]", bordeEstado(c.estado)) : undefined;
@@ -322,7 +322,8 @@ export function MRPTable({
                           valor={registro[campo]}
                           tipo="select"
                           opciones={["", ...unirOpciones(listaMezcla, registro[campo])]}
-                          vacio="Por definir"
+                          vacio="—"
+                          insignia
                           anchoTexto={ANCHO_TEXTO[campo]}
                           className={claseBorde}
                           alGuardar={(valor) => alActualizarCampo(registro.id, campo, String(valor ?? ""))}
@@ -383,9 +384,6 @@ export function MRPTable({
                   </td>
                   <td className={cn(CELDA_CIERRE, POS_CUMPL)}>
                     <div className="flex items-center gap-2.5">
-                      {c.ratio !== null ? (
-                        <BarraCumplimiento estado={c.estado} ratio={c.ratio} className="w-12" />
-                      ) : null}
                       <EstadoPastilla
                         estado={c.estado}
                         ratio={c.ratio}

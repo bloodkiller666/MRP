@@ -9,7 +9,7 @@ import type { CampoTextoMRP, EstadoCumplimiento, FiltrosMRP } from "@/lib/types"
 import { cn } from "@/lib/utils";
 
 import { Boton } from "./ui/Boton";
-import { Campo, Input, Select } from "./ui/Campos";
+import { Input, Select } from "./ui/Campos";
 
 interface BarraFiltrosProps {
   busqueda: string;
@@ -47,22 +47,22 @@ export function FiltersBar({
   const hayFiltros = activos.length > 0 || busqueda.trim() !== "" || estadoFiltro !== "";
 
   const selector = (campo: CampoTextoMRP) => (
-    <Campo key={campo} etiqueta={ETIQUETAS_CAMPO[campo]} htmlFor={`filtro-${campo}`}>
-      <Select
-        id={`filtro-${campo}`}
-        opciones={opciones[campo]}
-        value={filtros[campo]}
-        onChange={(evento) => alCambiarFiltro(campo, evento.target.value)}
-        opcionVacia="Todos"
-        className={cn(filtros[campo] && "border-accent bg-accent-soft font-medium")}
-      />
-    </Campo>
+    <Select
+      key={campo}
+      id={`filtro-${campo}`}
+      aria-label={`Filtrar por ${ETIQUETAS_CAMPO[campo].toLowerCase()}`}
+      opciones={opciones[campo]}
+      value={filtros[campo]}
+      onChange={(evento) => alCambiarFiltro(campo, evento.target.value)}
+      opcionVacia={ETIQUETAS_CAMPO[campo]}
+      className={cn("h-9 w-full", filtros[campo] ? "border-accent bg-accent-soft font-medium" : "text-ink-2")}
+    />
   );
 
   return (
-    <section aria-label="Filtros" className="rounded-xl border border-line bg-surface p-3 shadow-card sm:p-4">
+    <section aria-label="Filtros" className="rounded-xl border border-line bg-surface p-2.5 shadow-card">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-52 flex-1">
+        <div className="relative min-w-52 flex-[1_1_16rem]">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-3" />
           <Input
             type="search"
@@ -70,11 +70,29 @@ export function FiltersBar({
             onChange={(evento) => alBuscar(evento.target.value)}
             placeholder="Buscar cliente, vendedor, producto, aplicación…"
             aria-label="Buscador global"
-            className="pl-9"
+            className="h-9 pl-9"
           />
         </div>
 
+        <div className="grid min-w-0 flex-[3_1_36rem] grid-cols-2 gap-2 lg:grid-cols-4">
+          {COLUMNAS_FILTRO.map(selector)}
+        </div>
+
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExtra((previo) => !previo)}
+            aria-expanded={extra}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-accent transition-colors hover:bg-accent-soft"
+          >
+            <ChevronDown className={cn("size-3.5 transition-transform duration-200", extra && "rotate-180")} />
+            Más filtros
+            {activosExtra > 0 ? (
+              <span className="rounded-full bg-accent px-1.5 py-px text-[10px] font-semibold text-accent-ink">
+                {activosExtra}
+              </span>
+            ) : null}
+          </button>
           {acciones}
           <Boton
             variante="fantasma"
@@ -87,33 +105,14 @@ export function FiltersBar({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {COLUMNAS_FILTRO.map(selector)}
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setExtra((previo) => !previo)}
-        aria-expanded={extra}
-        className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent transition-colors hover:text-accent-hover"
-      >
-        <ChevronDown className={cn("size-3.5 transition-transform", extra && "rotate-180")} />
-        Más filtros
-        {activosExtra > 0 ? (
-          <span className="rounded-full bg-accent px-1.5 py-px text-[10px] font-semibold text-accent-ink">
-            {activosExtra}
-          </span>
-        ) : null}
-      </button>
-
       {extra ? (
-        <div className="mt-3 grid grid-cols-1 gap-3 border-t border-line pt-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-2.5 grid grid-cols-2 gap-2 border-t border-line pt-2.5 lg:grid-cols-4">
           {COLUMNAS_FILTRO_EXTRA.map(selector)}
         </div>
       ) : null}
 
       {hayFiltros ? (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-line pt-2.5">
           <span className="rotulo mr-1 text-ink-3">Activos</span>
           {activos.map(([campo, valor]) => (
             <button

@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   Plus,
   RotateCcw,
-  Route,
   Scale,
   Table2,
   Trash2,
@@ -26,6 +25,7 @@ import { Dashboard } from "@/components/Dashboard";
 import { CapturaReal } from "@/components/CapturaReal";
 import { ExcelImportModal } from "@/components/ExcelImportModal";
 import { FiltersBar } from "@/components/FiltersBar";
+import { MarcaMRP } from "@/components/MarcaMRP";
 import { MenuDatos } from "@/components/MenuDatos";
 import { MRPTable } from "@/components/MRPTable";
 import { PeriodoModal } from "@/components/PeriodoModal";
@@ -377,28 +377,60 @@ export function MRPApp() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* ------------------------------ Cabecera ------------------------------ */}
-      <header className="sticky top-0 z-30 bg-chrome-grad text-chrome-ink shadow-pop">
-        <div className="mx-auto flex w-full max-w-[112rem] items-center justify-between gap-3 px-4 pt-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/10 shadow-inner backdrop-blur">
-              <Route className="size-[18px] text-chrome-ink" strokeWidth={1.75} />
+      <header className="sticky top-0 z-30 border-b border-chrome-line bg-chrome-grad text-chrome-ink shadow-pop">
+        <div className="franja-via" aria-hidden="true" />
+        <div className="mx-auto flex w-full max-w-[112rem] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.07] text-chrome-ink shadow-[inset_0_0_0_1px_rgb(255_255_255/0.1)]">
+              <MarcaMRP className="size-6" />
             </span>
-            <div className="min-w-0">
-              <h1 className="truncate text-[15px] leading-tight font-semibold">Planificación de suministro</h1>
-              <p className="truncate text-xs text-chrome-ink-2">
-                Asfaltos y emulsiones · Demanda {etiquetaRango(mesesPeriodo)}
-              </p>
-            </div>
+            <h1 className="truncate text-[15px] leading-tight font-semibold tracking-[-0.005em]">
+              Planificación de suministro
+            </h1>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+        <nav
+          role="tablist"
+          aria-label="Vistas de la aplicación"
+          className="order-last flex w-full gap-1 md:order-none md:w-auto"
+        >
+          {(
+            [
+              { clave: "seguimiento", etiqueta: "Seguimiento", icono: Table2 },
+              { clave: "real", etiqueta: "Cargar real", icono: ClipboardPenLine },
+              { clave: "analisis", etiqueta: "Análisis", icono: LayoutDashboard },
+            ] as const
+          ).map(({ clave, etiqueta, icono: Icono }) => {
+            const activa = vista === clave;
+            return (
+              <button
+                key={clave}
+                type="button"
+                role="tab"
+                aria-selected={activa}
+                onClick={() => setVista(clave)}
+                className={cn(
+                  "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-[background-color,color] duration-150",
+                  activa
+                    ? "bg-white/[0.1] text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12)]"
+                    : "text-chrome-ink-2 hover:bg-white/[0.05] hover:text-chrome-ink",
+                )}
+              >
+                <Icono className={cn("size-4", activa && "text-[var(--marca)]")} />
+                {etiqueta}
+              </button>
+            );
+          })}
+        </nav>
+
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <Link
               href="/costos"
               title="Costos PLUS: costos de asfaltos grado A, B y C"
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-chrome-line px-3 text-sm font-medium text-chrome-ink transition-colors hover:bg-chrome-2"
             >
               <FlaskConical className="size-4 text-chrome-ink-2" />
-              <span className="hidden md:inline">Costos PLUS</span>
+              <span className="hidden xl:inline">Costos PLUS</span>
             </Link>
             <button
               type="button"
@@ -464,55 +496,21 @@ export function MRPApp() {
           </div>
         </div>
 
-        <nav
-          role="tablist"
-          aria-label="Vistas de la aplicación"
-          className="mx-auto mt-2 flex w-full max-w-[112rem] gap-1 px-4 sm:px-6"
-        >
-          {(
-            [
-              { clave: "seguimiento", etiqueta: "Seguimiento", icono: Table2 },
-              { clave: "real", etiqueta: "Cargar real", icono: ClipboardPenLine },
-              { clave: "analisis", etiqueta: "Análisis", icono: LayoutDashboard },
-            ] as const
-          ).map(({ clave, etiqueta, icono: Icono }) => {
-            const activa = vista === clave;
-            return (
-              <button
-                key={clave}
-                type="button"
-                role="tab"
-                aria-selected={activa}
-                onClick={() => setVista(clave)}
-                className={cn(
-                  "-mb-px inline-flex h-10 items-center gap-2 border-b-2 px-3.5 text-sm font-medium transition-colors",
-                  activa
-                    ? "border-white text-white"
-                    : "border-transparent text-chrome-ink-2 hover:text-chrome-ink",
-                )}
-              >
-                <Icono className="size-4" />
-                {etiqueta}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="franja-via" aria-hidden="true" />
       </header>
 
       {/* ------------------------------ Contenido ----------------------------- */}
       <main className="mx-auto flex w-full max-w-[112rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-ink">
+            <h2 className="font-display text-[1.95rem] leading-[1.1] font-medium tracking-[-0.015em] text-ink">
               {vista === "seguimiento"
                 ? "Seguimiento de demanda y cumplimiento"
                 : vista === "real"
                   ? "Carga de pronóstico y real"
                   : "Análisis del periodo"}
             </h2>
-            <p className="mt-0.5 text-sm text-ink-2">
-              Pronóstico por UM de {etiquetaRango(meses)} · {meses.length} {meses.length === 1 ? "mes" : "meses"} ·
+            <p className="mt-1 text-sm text-ink-2">
+              Asfaltos y emulsiones · Pronóstico por UM de {etiquetaRango(meses)} · {meses.length} {meses.length === 1 ? "mes" : "meses"} ·
               comparado con real + avance
             </p>
           </div>

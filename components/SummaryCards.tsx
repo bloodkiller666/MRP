@@ -32,8 +32,8 @@ function BarraConUmbrales({ estado, ratio }: { estado: EstadoCumplimiento; ratio
   const ancho = ratio === null ? 0 : Math.min(ratio, 1) * 100;
   const cortes = [UMBRAL_AMARILLO, UMBRAL_VERDE];
   return (
-    <div className="mt-3">
-      <div className="relative h-2.5 rounded-full bg-surface-3">
+    <div>
+      <div className="relative h-2 rounded-full bg-surface-3">
         <div
           className={cn("h-full rounded-full transition-[width] duration-300", ESTILOS_ESTADO[estado].barra)}
           style={{ width: `${ancho}%` }}
@@ -42,14 +42,14 @@ function BarraConUmbrales({ estado, ratio }: { estado: EstadoCumplimiento; ratio
           <span
             key={corte}
             aria-hidden
-            className="absolute -top-1 -bottom-1 w-0.5 -translate-x-1/2 rounded-full bg-ink-2/70"
+            className="absolute -top-0.5 -bottom-0.5 w-0.5 -translate-x-1/2 rounded-full bg-ink-2/60"
             style={{ left: `${corte * 100}%` }}
           />
         ))}
       </div>
-      <div className="relative mt-1 h-4 text-xs text-ink-3" aria-hidden>
+      <div className="relative mt-1 h-4 text-[11px] text-ink-3" aria-hidden>
         {cortes.map((corte) => (
-          <span key={corte} className="num absolute -translate-x-1/2" style={{ left: `${corte * 100}%` }}>
+          <span key={corte} className="num absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${corte * 100}%` }}>
             {Math.round(corte * 100)} %
           </span>
         ))}
@@ -89,21 +89,25 @@ export function SummaryCards({
       className="grid divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface shadow-card lg:grid-cols-[minmax(18rem,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)] lg:divide-x lg:divide-y-0"
     >
       {/* Cumplimiento --------------------------------------------------------- */}
-      <div className="px-4 py-3.5">
+      <div className="px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <h3 className="rotulo text-ink-2">Cumplimiento global</h3>
           <EstadoPastilla estado={resumen.estado} />
         </div>
-        <p
-          className={cn(
-            "num mt-1 text-[2.5rem] leading-none font-semibold tracking-tight",
-            ESTILOS_ESTADO[resumen.estado].texto,
-          )}
-        >
-          {formatearPorcentaje(resumen.ratio)}
-        </p>
-        <BarraConUmbrales estado={resumen.estado} ratio={resumen.ratio} />
-        <p className="text-xs text-ink-2">
+        <div className="mt-2 flex items-center gap-4">
+          <p
+            className={cn(
+              "num min-w-[5rem] font-display text-[2.6rem] leading-none font-medium tracking-tight",
+              ESTILOS_ESTADO[resumen.estado].texto,
+            )}
+          >
+            {formatearPorcentaje(resumen.ratio)}
+          </p>
+          <div className="min-w-0 flex-1">
+            <BarraConUmbrales estado={resumen.estado} ratio={resumen.ratio} />
+          </div>
+        </div>
+        <p className="mt-0.5 text-xs text-ink-3">
           {resumen.ratio === null
             ? "Se calcula cuando haya real + avance cargado."
             : "Sobre los registros que ya reportan real."}
@@ -111,7 +115,7 @@ export function SummaryCards({
       </div>
 
       {/* Demanda y real ------------------------------------------------------- */}
-      <div className="px-4 py-3.5">
+      <div className="px-4 py-3">
         <h3 className="rotulo text-ink-2">Demanda y real por unidad</h3>
         {porUnidad.length === 0 ? (
           <p className="num mt-2 text-2xl font-semibold text-ink">–</p>
@@ -135,10 +139,10 @@ export function SummaryCards({
                 <tr key={unidad} className="border-t border-line">
                   <th scope="row" className="py-1.5 text-left font-semibold text-ink-2">
                     {unidad}
-                    <span className="block text-xs font-normal text-ink-3">{cantidad} registros</span>
+                    <span className="ml-1.5 text-xs font-normal text-ink-3">{cantidad} reg.</span>
                   </th>
-                  <td className="num py-1.5 text-right text-lg font-semibold text-ink">{formatearNumero(r.demanda)}</td>
-                  <td className="num py-1.5 text-right text-lg font-semibold text-ink">
+                  <td className="num py-1.5 text-right text-base font-semibold text-ink">{formatearNumero(r.demanda)}</td>
+                  <td className="num py-1.5 text-right text-base font-semibold text-ink">
                     {r.ratio === null ? <span className="font-normal text-ink-3">–</span> : formatearNumero(r.real)}
                   </td>
                 </tr>
@@ -146,10 +150,10 @@ export function SummaryCards({
             </tbody>
           </table>
         )}
-        <p className="mt-1.5 text-xs text-ink-2">
+        <p className="mt-1 text-xs text-ink-3">
           {conRealCargado === 0 ? (
             <>
-              Aún no hay despacho cargado. Se carga en la pestaña <strong className="font-semibold">Cargar real</strong>.
+              Sin despacho cargado: use la pestaña <strong className="font-semibold">Cargar real</strong>.
             </>
           ) : (
             <>
@@ -161,7 +165,7 @@ export function SummaryCards({
       </div>
 
       {/* Semáforo (también filtra) -------------------------------------------- */}
-      <div className="px-4 py-3.5">
+      <div className="px-4 py-3">
         <h3 className="rotulo text-ink-2">Semáforo · clic para filtrar</h3>
         <ul className="mt-2 grid grid-cols-2 gap-1.5">
           {ESTADOS_FILTRABLES.map((estado) => {
@@ -175,7 +179,7 @@ export function SummaryCards({
                   onClick={() => alCambiarEstado(activo ? "" : estado)}
                   title={`${ETIQUETAS_ESTADO[estado]}: ${REGLA_ESTADO[estado]}`}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors",
+                    "flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-[background-color,border-color] duration-150",
                     activo ? "border-accent bg-accent-soft" : "border-line hover:bg-surface-2",
                   )}
                 >
@@ -189,9 +193,6 @@ export function SummaryCards({
             );
           })}
         </ul>
-        <p className="mt-1.5 text-xs text-ink-3">
-          Verde {REGLA_ESTADO.verde} · Amarillo {REGLA_ESTADO.amarillo} · Rojo {REGLA_ESTADO.rojo}
-        </p>
       </div>
     </section>
   );
@@ -231,7 +232,7 @@ export function SelectorPeriodo({
             const elegido = periodos.find((p) => idDe(p) === evento.target.value);
             if (elegido) alElegirPeriodo(elegido);
           }}
-          className="h-9 cursor-pointer rounded-lg border border-field bg-surface px-2.5 text-sm font-medium text-ink"
+          className="h-9 cursor-pointer rounded-lg border border-field bg-surface pr-8 pl-2.5 text-sm font-medium text-ink"
         >
           {periodos.map((p) => (
             <option key={idDe(p)} value={idDe(p)}>
