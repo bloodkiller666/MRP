@@ -211,6 +211,7 @@ export const TEMA_STORAGE_KEY = "mrp:tema";
 export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v3";
 export const PERIODOS_STORAGE_KEY = "mrp:periodos:v1";
 export const TASAS_STORAGE_KEY = "mrp:tasas:v1";
+export const ABASTECIMIENTO_STORAGE_KEY = "mrp:abastecimiento:v1";
 
 /** Leyenda mostrada en el pie de la tabla y en las exportaciones. */
 export const ETIQUETA_TOTAL = "TOTAL";

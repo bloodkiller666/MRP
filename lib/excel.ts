@@ -545,7 +545,7 @@ export function nombreArchivoExportado(base = "MRP_Seguimiento"): string {
 }
 
 /** Dispara la descarga de un archivo binario desde el navegador. */
-function descargarArchivo(datos: ArrayBuffer, nombre: string): void {
+export function descargarArchivo(datos: ArrayBuffer, nombre: string): void {
   const tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   const url = URL.createObjectURL(new Blob([datos], { type: tipo }));
 

@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  Boxes,
   CheckCircle2,
   ClipboardPenLine,
   Download,
@@ -20,6 +21,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AbastecimientoView } from "@/components/abastecimiento/AbastecimientoView";
 import { ColumnasSelector } from "@/components/ColumnasSelector";
 import { Dashboard } from "@/components/Dashboard";
 import { CapturaReal } from "@/components/CapturaReal";
@@ -69,7 +71,7 @@ import type { CampoTextoMRP, EstadoCumplimiento, FiltrosMRP, MesKey, Periodo, Re
 import { cn } from "@/lib/utils";
 
 /** Vistas principales de la aplicación, alternables con pestañas. */
-type Vista = "seguimiento" | "real" | "analisis";
+type Vista = "seguimiento" | "real" | "analisis" | "abastecimiento";
 
 const clasesBotonCabecera =
   "inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-semibold whitespace-nowrap transition-colors";
@@ -399,6 +401,7 @@ export function MRPApp() {
               { clave: "seguimiento", etiqueta: "Seguimiento", icono: Table2 },
               { clave: "real", etiqueta: "Cargar real", icono: ClipboardPenLine },
               { clave: "analisis", etiqueta: "Análisis", icono: LayoutDashboard },
+              { clave: "abastecimiento", etiqueta: "Abastecimiento", icono: Boxes },
             ] as const
           ).map(({ clave, etiqueta, icono: Icono }) => {
             const activa = vista === clave;
@@ -500,6 +503,10 @@ export function MRPApp() {
 
       {/* ------------------------------ Contenido ----------------------------- */}
       <main className="mx-auto flex w-full max-w-[112rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
+        {vista === "abastecimiento" ? (
+          <AbastecimientoView registros={registros} />
+        ) : (
+          <>
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div>
             <h2 className="font-display text-[1.95rem] leading-[1.1] font-medium tracking-[-0.015em] text-ink">
@@ -641,6 +648,8 @@ export function MRPApp() {
           />
         ) : (
           <Dashboard registros={registrosMostrados} meses={meses} alCargarVendedor={cargarDeVendedor} />
+        )}
+          </>
         )}
       </main>
 
