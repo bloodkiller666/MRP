@@ -15,6 +15,7 @@ import {
   Scale,
   Table2,
   Trash2,
+  Undo2,
   Upload,
   X,
 } from "lucide-react";
@@ -48,6 +49,10 @@ import {
 } from "@/lib/constants";
 import { convertirACisternas, convertirATM, desdeCisternas, desdeTM } from "@/lib/conversion";
 import { conMezcla } from "@/lib/mezclas";
+import { esAtajoDeshacer } from "@/lib/historial";
+import { navegarPestanas } from "@/lib/teclado";
+
+import { EsqueletoSeguimiento } from "./ui/Esqueleto";
 import { exportarRegistrosExcel } from "@/lib/excel";
 import {
   combinarOpciones,
@@ -98,6 +103,8 @@ export function MRPApp() {
     eliminar,
     restaurar,
     vaciar,
+    deshacer,
+    puedeDeshacer,
   } = useMrpStore();
 
   /** Los campos de mezcla vacíos toman el valor de la regla (lib/mezclas.ts); lo escrito a mano manda. */
@@ -125,6 +132,7 @@ export function MRPApp() {
   const [modalFormulario, setModalFormulario] = useState(false);
   const [registroEditando, setRegistroEditando] = useState<RegistroMRP | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [avisoConDeshacer, setAvisoConDeshacer] = useState(false);
   const [exportandoPdf, setExportandoPdf] = useState(false);
 
   /* ----------------------------- Datos derivados ---------------------------- */
@@ -212,13 +220,33 @@ export function MRPApp() {
 
   /* ------------------------------- Avisos (UI) ------------------------------ */
 
-  const mostrarAviso = useCallback((mensaje: string) => setAviso(mensaje), []);
+  /** `conDeshacer` agrega el botón «Deshacer» al aviso (para eliminar, importar y otros cambios grandes). */
+  const mostrarAviso = useCallback((mensaje: string, conDeshacer = false) => {
+    setAviso(mensaje);
+    setAvisoConDeshacer(conDeshacer);
+  }, []);
 
   useEffect(() => {
     if (!aviso) return;
-    const temporizador = window.setTimeout(() => setAviso(null), 5000);
+    const temporizador = window.setTimeout(() => setAviso(null), avisoConDeshacer ? 9000 : 5000);
     return () => window.clearTimeout(temporizador);
-  }, [aviso]);
+  }, [aviso, avisoConDeshacer]);
+
+  const alDeshacer = useCallback(() => {
+    if (deshacer()) mostrarAviso("Se deshizo el último cambio.");
+  }, [deshacer, mostrarAviso]);
+
+  // Ctrl/Cmd + Z fuera de un campo de texto. En Abastecimiento lo atiende esa pestaña.
+  useEffect(() => {
+    if (vista === "abastecimiento") return;
+    const alPresionar = (evento: KeyboardEvent) => {
+      if (!esAtajoDeshacer(evento)) return;
+      evento.preventDefault();
+      alDeshacer();
+    };
+    window.addEventListener("keydown", alPresionar);
+    return () => window.removeEventListener("keydown", alPresionar);
+  }, [vista, alDeshacer]);
 
   /* --------------------------------- Acciones ------------------------------- */
 
@@ -235,6 +263,7 @@ export function MRPApp() {
 
   const alImportar = (nuevos: RegistroMRP[]) => {
     const { anexados, actualizados } = importarCombinando(nuevos);
+    // Si se abre un periodo nuevo, el registro cambia en dos stores; «Deshacer» solo revierte los registros.
 
     // Los meses del archivo que ningún periodo cubre abren su propio periodo.
     const mesesArchivo = new Set<MesKey>();
@@ -254,6 +283,7 @@ export function MRPApp() {
         (creados.length > 0
           ? ` Se abrió el periodo ${creados.map((p) => etiquetaRango(mesesDePeriodo(p))).join(", ")}.`
           : ""),
+      true,
     );
   };
 
@@ -294,9 +324,9 @@ export function MRPApp() {
 
   const alEliminar = (registro: RegistroMRP) => {
     const etiqueta = registro.detalleProducto || registro.cuenta || "el registro";
-    if (!window.confirm(`¿Eliminar «${etiqueta}»? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar «${etiqueta}»?`)) return;
     eliminar(registro.id);
-    mostrarAviso("Registro eliminado.");
+    mostrarAviso("Registro eliminado.", true);
   };
 
   /** En vista TM las cifras se escriben en toneladas: se guardan de vuelta en la UM original del registro. */
@@ -394,6 +424,7 @@ export function MRPApp() {
         <nav
           role="tablist"
           aria-label="Vistas de la aplicación"
+          onKeyDown={navegarPestanas}
           className="order-last flex w-full gap-1 md:order-none md:w-auto"
         >
           {(
@@ -410,7 +441,10 @@ export function MRPApp() {
                 key={clave}
                 type="button"
                 role="tab"
+                id={`pestana-${clave}`}
                 aria-selected={activa}
+                aria-controls="panel-vista"
+                tabIndex={activa ? 0 : -1}
                 onClick={() => setVista(clave)}
                 className={cn(
                   "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-[background-color,color] duration-150",
@@ -502,7 +536,12 @@ export function MRPApp() {
       </header>
 
       {/* ------------------------------ Contenido ----------------------------- */}
-      <main className="mx-auto flex w-full max-w-[112rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
+      <main
+        id="panel-vista"
+        role="tabpanel"
+        aria-labelledby={`pestana-${vista}`}
+        className="mx-auto flex w-full max-w-[112rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6"
+      >
         {vista === "abastecimiento" ? (
           <AbastecimientoView registros={registros} />
         ) : (
@@ -579,6 +618,10 @@ export function MRPApp() {
           </p>
         ) : null}
 
+        {!listo ? (
+          <EsqueletoSeguimiento />
+        ) : (
+          <>
         <SummaryCards
           registros={registrosMostrados}
           registrosParaSemaforo={registrosParaSemaforo}
@@ -651,6 +694,8 @@ export function MRPApp() {
         )}
           </>
         )}
+          </>
+        )}
       </main>
 
       <footer className="border-t border-line bg-surface/80 backdrop-blur">
@@ -668,7 +713,20 @@ export function MRPApp() {
               "Cargando datos guardados…"
             )}
           </p>
-          <p>Origen: Excel «Consumo MP Asfaltos», hoja Base de datos</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <button
+              type="button"
+              onClick={alDeshacer}
+              disabled={!puedeDeshacer}
+              title="Vuelve a la versión anterior de los registros (Ctrl + Z)"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            >
+              <Undo2 className="size-3.5" aria-hidden />
+              Deshacer
+              <kbd className="rounded border border-line px-1 font-sans text-[10px] text-ink-3">Ctrl Z</kbd>
+            </button>
+            <p>Origen: Excel «Consumo MP Asfaltos», hoja Base de datos</p>
+          </div>
         </div>
       </footer>
 
@@ -682,6 +740,17 @@ export function MRPApp() {
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ok" />
             {aviso}
           </p>
+          {avisoConDeshacer ? (
+            <button
+              type="button"
+              onClick={() => {
+                alDeshacer();
+              }}
+              className="shrink-0 rounded-md border border-chrome-line px-2 py-0.5 text-xs font-semibold text-chrome-ink transition-colors hover:bg-chrome-2"
+            >
+              Deshacer
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setAviso(null)}

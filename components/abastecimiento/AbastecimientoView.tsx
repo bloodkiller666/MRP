@@ -1,14 +1,17 @@
 "use client";
 
-import { AlertTriangle, FileSpreadsheet, RotateCcw, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { AlertTriangle, FileSpreadsheet, Plus, RotateCcw, Undo2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAbastecimiento } from "@/hooks/use-abastecimiento";
 import { useTasas } from "@/hooks/use-tasas";
 import { calcularPlan, type CompraSugerida, type MateriaPrima } from "@/lib/abastecimiento";
 import { exportarAbastecimientoExcel, type PlanConMateria } from "@/lib/abastecimiento-excel";
+import { exportarComprasPdf } from "@/lib/abastecimiento-pdf";
 import { consumoPronosticado, extraerDemanda } from "@/lib/abastecimiento-demanda";
 import { parsearMb51 } from "@/lib/mb51";
+import { esAtajoDeshacer } from "@/lib/historial";
+import { navegarPestanas } from "@/lib/teclado";
 import { etiquetaMesAnio } from "@/lib/periodos";
 import { calcularTasa } from "@/lib/tasas";
 import type { MesKey, RegistroMRP } from "@/lib/types";
@@ -16,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 import { Boton } from "../ui/Boton";
 import { formatearFechaIso, formatearTn } from "./formato";
+import { FormMateriaModal, type ResultadoFormMateria } from "./FormMateriaModal";
 import { GrillaMateria } from "./GrillaMateria";
 import { ReporteCompras } from "./ReporteCompras";
 
@@ -38,7 +42,7 @@ interface Mensaje {
  *   lote mínimo y se genera el reporte de compras con la fecha límite según el tiempo de entrega.
  */
 export function AbastecimientoView({ registros }: PropsAbastecimiento) {
-  const { estado, acciones } = useAbastecimiento();
+  const { estado, acciones, puedeDeshacer } = useAbastecimiento();
   const { tasas } = useTasas();
   // Mes de hoy: la vista solo se monta al abrir la pestaña, así que no choca con la hidratación.
   const [hoy] = useState(() => new Date());
@@ -47,7 +51,35 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
   const [importando, setImportando] = useState(false);
   const [seleccion, setSeleccion] = useState(estado.materias[0]?.id ?? "");
 
+  /** Cuadro abierto: alta (con datos de SAP opcionales) o edición de una materia prima. */
+  const [modalMateria, setModalMateria] = useState<
+    { modo: "crear"; precarga?: { codigo: string; nombre: string } } | { modo: "editar"; id: string } | null
+  >(null);
+
+  const alDeshacer = () => {
+    if (acciones.deshacer()) setMensaje({ tipo: "ok", texto: "Se deshizo el último cambio." });
+  };
+
+  // Ctrl/Cmd + Z fuera de un campo de texto.
+  useEffect(() => {
+    const alPresionar = (evento: KeyboardEvent) => {
+      if (!esAtajoDeshacer(evento)) return;
+      evento.preventDefault();
+      if (acciones.deshacer()) setMensaje({ tipo: "ok", texto: "Se deshizo el último cambio." });
+    };
+    window.addEventListener("keydown", alPresionar);
+    return () => window.removeEventListener("keydown", alPresionar);
+  }, [acciones]);
+
   const demanda = useMemo(() => extraerDemanda(registros), [registros]);
+
+  /** Materiales del MB51 que no suman a ninguna materia prima: se pueden dar de alta con un clic. */
+  const sinMateria = useMemo(() => {
+    const usados = new Set(estado.materias.flatMap((m) => m.codigosSap));
+    return Object.entries(estado.consumosSap)
+      .filter(([codigo]) => !usados.has(codigo))
+      .map(([codigo, c]) => ({ codigo, nombre: c.nombre }));
+  }, [estado.materias, estado.consumosSap]);
 
   const planes: (PlanConMateria & { fuente: string })[] = useMemo(() => {
     const mesesConSap = new Set<MesKey>();
@@ -81,17 +113,14 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
       const resultado = await parsearMb51(archivo);
       acciones.importarMb51(resultado);
       const conocidos = new Set(estado.materias.flatMap((m) => m.codigosSap));
-      const sinMateria = Object.entries(resultado.consumos).filter(([codigo]) => !conocidos.has(codigo));
+      const nuevosSinMateria = Object.keys(resultado.consumos).filter((codigo) => !conocidos.has(codigo));
       setMensaje({
         tipo: "ok",
         texto:
           `MB51 cargado: ${resultado.movimientos.toLocaleString("es-PE")} movimientos de ${Object.keys(resultado.consumos).length} materiales ` +
           `(${formatearFechaIso(resultado.desde)} al ${formatearFechaIso(resultado.hasta)}).` +
-          (sinMateria.length > 0
-            ? ` ${sinMateria.length} materiales no están asociados a una materia prima y no se usan: ${sinMateria
-                .slice(0, 6)
-                .map(([codigo, c]) => `${codigo} ${c.nombre}`)
-                .join(", ")}${sinMateria.length > 6 ? "…" : ""}.`
+          (nuevosSinMateria.length > 0
+            ? ` ${nuevosSinMateria.length} material${nuevosSinMateria.length === 1 ? "" : "es"} no está${nuevosSinMateria.length === 1 ? "" : "n"} asociado${nuevosSinMateria.length === 1 ? "" : "s"} a una materia prima (ver más abajo para agregarlos).`
             : ""),
       });
     } catch (error) {
@@ -145,6 +174,23 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
             {importando ? "Leyendo MB51…" : "Importar MB51 (SAP)"}
           </Boton>
           <Boton
+            variante="secundario"
+            icono={<Plus className="size-4" />}
+            onClick={() => setModalMateria({ modo: "crear" })}
+            title="Da de alta una materia prima nueva con su proveedor"
+          >
+            Nueva materia prima
+          </Boton>
+          <Boton
+            variante="fantasma"
+            icono={<Undo2 className="size-4" />}
+            disabled={!puedeDeshacer}
+            onClick={alDeshacer}
+            title="Vuelve a la versión anterior (Ctrl + Z)"
+          >
+            Deshacer
+          </Boton>
+          <Boton
             variante="fantasma"
             icono={<RotateCcw className="size-4" />}
             onClick={() => {
@@ -178,6 +224,31 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
         </p>
       ) : null}
 
+      {sinMateria.length > 0 ? (
+        <details className="rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm">
+          <summary className="cursor-pointer font-medium text-ink-2">
+            {sinMateria.length} material{sinMateria.length === 1 ? "" : "es"} de SAP sin materia prima asociada
+          </summary>
+          <p className="mt-2 text-xs text-ink-3">
+            Consumen según el MB51 pero no entran al MRP. Elija uno para darlo de alta con su código y nombre ya cargados.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {sinMateria.map(({ codigo, nombre }) => (
+              <li key={codigo}>
+                <button
+                  type="button"
+                  onClick={() => setModalMateria({ modo: "crear", precarga: { codigo, nombre } })}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:border-accent hover:text-ink"
+                >
+                  <Plus className="size-3" aria-hidden />
+                  <span className="num">{codigo}</span> {nombre}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
       {enQuiebre.length > 0 ? (
         <div role="alert" className="flex gap-3 rounded-lg border border-bad-line bg-bad-soft px-3.5 py-3 text-sm text-bad">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -195,8 +266,8 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
         <p className="text-xs text-warn">
           {lotesPorConfirmar.length} materia{lotesPorConfirmar.length === 1 ? "" : "s"} prima
           {lotesPorConfirmar.length === 1 ? "" : "s"} con compra sugerida usa{lotesPorConfirmar.length === 1 ? "" : "n"} un
-          lote mínimo por confirmar ({lotesPorConfirmar.map(({ mp }) => mp.nombre).join(", ")}). El Excel no trae ese dato:
-          se dedujo del tamaño de los ingresos.
+          lote mínimo provisional ({lotesPorConfirmar.map(({ mp }) => mp.nombre).join(", ")}): se usó el tamaño habitual de
+          sus ingresos. Cargue el lote real en los parámetros de cada materia prima.
         </p>
       ) : null}
 
@@ -209,10 +280,11 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
           document.getElementById("mrp-materia")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
         alDescargar={() => void exportarAbastecimientoExcel(planes, hoy)}
+        alDescargarPdf={(visibles, horizonteMeses) => void exportarComprasPdf({ compras: visibles, hoy, horizonteMeses })}
       />
 
       <section id="mrp-materia" aria-label="MRP por materia prima" className="flex scroll-mt-20 flex-col gap-3">
-        <div role="tablist" aria-label="Materia prima" className="flex flex-wrap gap-1.5">
+        <div role="tablist" aria-label="Materia prima" onKeyDown={navegarPestanas} className="flex flex-wrap gap-1.5">
           {planes.map(({ mp, plan }) => {
             const activa = mp.id === materiaElegida?.mp.id;
             const estadoMp = plan.mesesEnQuiebre > 0 ? "quiebre" : plan.compras.length > 0 ? "compra" : "ok";
@@ -221,7 +293,10 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
                 key={mp.id}
                 type="button"
                 role="tab"
+                id={`pestana-mp-${mp.id}`}
                 aria-selected={activa}
+                aria-controls="panel-mp"
+                tabIndex={activa ? 0 : -1}
                 onClick={() => setSeleccion(mp.id)}
                 className={cn(
                   "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-[background-color,border-color,color] duration-150",
@@ -247,14 +322,58 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
         </div>
 
         {materiaElegida ? (
-          <GrillaMateria
-            mp={materiaElegida.mp}
-            plan={materiaElegida.plan}
-            acciones={acciones}
-            fuenteDemanda={materiaElegida.fuente}
-          />
-        ) : null}
+          <div id="panel-mp" role="tabpanel" aria-labelledby={`pestana-mp-${materiaElegida.mp.id}`}>
+            <GrillaMateria
+              mp={materiaElegida.mp}
+              plan={materiaElegida.plan}
+              acciones={acciones}
+              fuenteDemanda={materiaElegida.fuente}
+              alEditarMateria={() => setModalMateria({ modo: "editar", id: materiaElegida.mp.id })}
+              alEliminarMateria={() => {
+                const { mp } = materiaElegida;
+                if (!window.confirm(`¿Eliminar «${mp.nombre}» y todo lo cargado en ella (ingresos, consumos manuales)? Puede deshacerlo con Ctrl + Z.`)) return;
+                acciones.eliminarMateria(mp.id);
+                setMensaje({ tipo: "ok", texto: `Se eliminó «${mp.nombre}». Si fue un error, use «Deshacer».` });
+              }}
+            />
+          </div>
+        ) : (
+          <p className="rounded-xl border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">
+            No hay materias primas. Agregue una con «Nueva materia prima» o use «Restaurar» para volver a las del Excel.
+          </p>
+        )}
       </section>
+
+      {modalMateria ? (
+        <FormMateriaModal
+          key={modalMateria.modo === "editar" ? modalMateria.id : (modalMateria.precarga?.codigo ?? "nueva")}
+          materia={modalMateria.modo === "editar" ? estado.materias.find((m) => m.id === modalMateria.id) : undefined}
+          precarga={modalMateria.modo === "crear" ? modalMateria.precarga : undefined}
+          nombresExistentes={estado.materias
+            .filter((m) => modalMateria.modo !== "editar" || m.id !== modalMateria.id)
+            .map((m) => m.nombre)}
+          codigosEnUso={
+            new Map(
+              estado.materias
+                .filter((m) => modalMateria.modo !== "editar" || m.id !== modalMateria.id)
+                .flatMap((m) => m.codigosSap.map((c) => [c, m.nombre] as const)),
+            )
+          }
+          tasasDisponibles={tasas.map((t) => t.mp)}
+          onCerrar={() => setModalMateria(null)}
+          onGuardar={(resultado: ResultadoFormMateria) => {
+            if (resultado.modo === "crear") {
+              const id = acciones.agregarMateria(resultado.datos);
+              setSeleccion(id);
+              setMensaje({ tipo: "ok", texto: `Se creó «${resultado.datos.nombre}». Cargue su stock inicial e ingresos en la grilla.` });
+            } else if (modalMateria.modo === "editar") {
+              acciones.actualizarDatosMateria(modalMateria.id, resultado.cambios);
+              setMensaje({ tipo: "ok", texto: `Se actualizaron los datos de «${resultado.cambios.nombre}».` });
+            }
+            setModalMateria(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

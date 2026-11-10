@@ -22,6 +22,9 @@ export interface MrpStore {
   eliminar: (id: string) => void;
   restaurar: () => void;
   vaciar: () => void;
+  /** Vuelve a la versión anterior de los registros. */
+  deshacer: () => boolean;
+  puedeDeshacer: boolean;
 }
 
 /**
@@ -44,9 +47,17 @@ export function useMrpStore(): MrpStore {
     mrpStore.estaHidratadoServidor,
   );
 
+  const puedeDeshacer = useSyncExternalStore(
+    mrpStore.suscribir,
+    mrpStore.puedeDeshacer,
+    mrpStore.puedeDeshacerServidor,
+  );
+
   return {
     registros,
     listo,
+    deshacer: mrpStore.deshacer,
+    puedeDeshacer,
     importar: mrpStore.importar,
     importarCombinando: mrpStore.importarCombinando,
     agregar: mrpStore.agregar,

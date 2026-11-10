@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Clock, Download, PackageCheck, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileText, PackageCheck, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import type { CompraSugerida } from "@/lib/abastecimiento";
@@ -16,6 +16,8 @@ interface PropsReporte {
   alConfirmar: (compra: CompraSugerida) => void;
   alVerMateria: (mpId: string) => void;
   alDescargar: () => void;
+  /** Recibe lo que se ve en pantalla (ya filtrado por horizonte) y el horizonte elegido. */
+  alDescargarPdf: (compras: CompraSugerida[], horizonteMeses: number) => void;
 }
 
 /**
@@ -25,7 +27,7 @@ interface PropsReporte {
  */
 const HORIZONTES = [3, 6, 12, 18] as const;
 
-export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDescargar }: PropsReporte) {
+export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDescargar, alDescargarPdf }: PropsReporte) {
   // Solo se muestran los pedidos que llegan dentro del horizonte: los de más adelante cambian con
   // cada importación de SAP y de la demanda, y no se pueden accionar hoy.
   const [horizonte, setHorizonte] = useState<number>(6);
@@ -68,6 +70,13 @@ export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDesc
           </label>
           <Boton variante="secundario" icono={<Download className="size-4" />} onClick={alDescargar}>
             Descargar a Excel
+          </Boton>
+          <Boton
+            variante="secundario"
+            icono={<FileText className="size-4" />}
+            onClick={() => alDescargarPdf(ordenadas, horizonte)}
+          >
+            Descargar a PDF
           </Boton>
         </div>
       </header>
@@ -144,9 +153,9 @@ export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDesc
                       {!c.loteConfirmado ? (
                         <span
                           className="mt-0.5 block text-xs font-normal text-warn"
-                          title="El lote mínimo se dedujo del Excel: revisarlo en los parámetros de la materia prima"
+                          title="Lote mínimo provisional: cargue el real en los parámetros de la materia prima"
                         >
-                          Lote por confirmar
+                          Lote pendiente de cargar
                         </span>
                       ) : null}
                     </Td>
@@ -163,7 +172,7 @@ export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDesc
                       <span className="whitespace-nowrap">{etiquetaMesAnio(c.mesLlegada)}</span>
                     </Td>
                     <Td derecha>
-                      <span className="num font-semibold text-ink">{formatearTn(c.cantidadTn)} TN</span>
+                      <span className="num font-semibold whitespace-nowrap text-ink">{formatearTn(c.cantidadTn)} TN</span>
                       <span className="num block text-xs text-ink-3">
                         {c.lotes} × {formatearTn(c.loteTn)}
                       </span>

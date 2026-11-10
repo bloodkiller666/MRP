@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,9 @@ interface ModalProps {
   pie?: ReactNode;
   children: ReactNode;
 }
+
+const FOCALIZABLES =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const TAMANOS: Record<NonNullable<ModalProps["tamano"]>, string> = {
   sm: "sm:max-w-md",
@@ -37,11 +40,53 @@ export function Modal({
   pie,
   children,
 }: ModalProps) {
+  const panel = useRef<HTMLDivElement>(null);
+  // `onCerrar` suele ser una función nueva en cada render: se guarda en una ref para que el
+  // efecto de foco no se repita (y no le robe el foco al campo que se está escribiendo).
+  const cerrarRef = useRef(onCerrar);
+  useEffect(() => {
+    cerrarRef.current = onCerrar;
+  });
+
   useEffect(() => {
     if (!abierto) return;
 
+    const quienTeniaElFoco = document.activeElement as HTMLElement | null;
+    const enfocables = () =>
+      Array.from(panel.current?.querySelectorAll<HTMLElement>(FOCALIZABLES) ?? []).filter((el) => {
+        const estilo = window.getComputedStyle(el);
+        return estilo.display !== "none" && estilo.visibility !== "hidden" && !el.closest("[hidden]");
+      });
+
+    // Al abrir, el foco entra al cuadro: al primer campo de datos si lo hay, si no al panel.
+    const primerCampo = panel.current?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    );
+    (primerCampo ?? panel.current)?.focus();
+
     const alPresionar = (evento: KeyboardEvent) => {
-      if (evento.key === "Escape") onCerrar();
+      if (evento.key === "Escape") {
+        cerrarRef.current();
+        return;
+      }
+      if (evento.key !== "Tab") return;
+      // Tab y Mayús+Tab dan la vuelta dentro del cuadro: el foco no se escapa a la página de fondo.
+      const lista = enfocables();
+      if (lista.length === 0) {
+        evento.preventDefault();
+        panel.current?.focus();
+        return;
+      }
+      const primero = lista[0];
+      const ultimo = lista[lista.length - 1];
+      const activo = document.activeElement;
+      if (evento.shiftKey && (activo === primero || activo === panel.current)) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && activo === ultimo) {
+        evento.preventDefault();
+        primero.focus();
+      }
     };
     const overflowPrevio = document.body.style.overflow;
 
@@ -51,8 +96,10 @@ export function Modal({
     return () => {
       document.body.style.overflow = overflowPrevio;
       window.removeEventListener("keydown", alPresionar);
+      // Al cerrar, el foco vuelve al botón que abrió el cuadro.
+      if (quienTeniaElFoco?.isConnected) quienTeniaElFoco.focus();
     };
-  }, [abierto, onCerrar]);
+  }, [abierto]);
 
   if (!abierto) return null;
 
@@ -65,11 +112,13 @@ export function Modal({
       }}
     >
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
+        tabIndex={-1}
         className={cn(
-          "flex max-h-full w-full flex-col overflow-hidden border-line bg-surface shadow-pop sm:rounded-2xl sm:border",
+          "flex max-h-full outline-none w-full flex-col overflow-hidden border-line bg-surface shadow-pop sm:rounded-2xl sm:border",
           TAMANOS[tamano],
         )}
       >

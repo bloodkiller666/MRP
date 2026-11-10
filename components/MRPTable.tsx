@@ -393,13 +393,13 @@ export function MRPTable({
                   </td>
 
                   <td className="sticky right-0 z-[5] border-b border-line bg-surface px-2 py-1.5">
-                    <div className="flex items-center justify-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                    <div className="flex items-center justify-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
                       <button
                         type="button"
                         onClick={() => alEditarFila(registro)}
                         title="Editar registro completo"
                         aria-label="Editar registro completo"
-                        className="rounded p-1.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+                        className="rounded p-1.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink pointer-coarse:p-2.5"
                       >
                         <Pencil className="size-3.5" />
                       </button>
@@ -408,7 +408,7 @@ export function MRPTable({
                         onClick={() => alEliminar(registro)}
                         title="Eliminar registro"
                         aria-label="Eliminar registro"
-                        className="rounded p-1.5 text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad"
+                        className="rounded p-1.5 text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad pointer-coarse:p-2.5"
                       >
                         <Trash2 className="size-3.5" />
                       </button>

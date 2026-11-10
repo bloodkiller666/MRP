@@ -1,14 +1,16 @@
 "use client";
 
-import { Check, Info } from "lucide-react";
+import { Check, Info, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import type { FilaMes, MateriaPrima, OrigenConsumo, PlanMateria } from "@/lib/abastecimiento";
+import type { FilaMes, MateriaPrima, OrigenConsumo, PlanMateria, Proveedor } from "@/lib/abastecimiento";
 import type { AbastecimientoHook } from "@/hooks/use-abastecimiento";
 import { etiquetaMes } from "@/lib/periodos";
 import { cn, parsearNumero } from "@/lib/utils";
 
+import { Boton } from "../ui/Boton";
 import { clasesInput } from "../ui/Campos";
+import { FormProveedorModal } from "./FormProveedorModal";
 import { formatearDias, formatearTn } from "./formato";
 
 interface PropsGrilla {
@@ -17,6 +19,8 @@ interface PropsGrilla {
   acciones: AbastecimientoHook["acciones"];
   /** Texto con la fuente de la demanda (regla + tasa) o la razón por la que no hay. */
   fuenteDemanda: string;
+  alEditarMateria: () => void;
+  alEliminarMateria: () => void;
 }
 
 const ORIGEN: Record<OrigenConsumo, { etiqueta: string; titulo: string }> = {
@@ -30,7 +34,7 @@ const COL_ETIQUETA = "sticky left-0 z-[5] w-56 min-w-56 max-w-56 bg-surface px-3
 const COL_MES = "w-[5.25rem] min-w-[5.25rem] px-2 text-right";
 
 /** Parámetros de la materia prima + el MRP mes a mes (stock inicial, consumo, ingresos, stock final). */
-export function GrillaMateria({ mp, plan, acciones, fuenteDemanda }: PropsGrilla) {
+export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMateria, alEliminarMateria }: PropsGrilla) {
   const [anioCompleto, setAnioCompleto] = useState(false);
 
   // Por defecto se ve desde 2 meses atrás: el resto del año ya pasó y ocupa lugar.
@@ -42,7 +46,13 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda }: PropsGrilla
 
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
-      <Parametros mp={mp} acciones={acciones} fuenteDemanda={fuenteDemanda} />
+      <Parametros
+        mp={mp}
+        acciones={acciones}
+        fuenteDemanda={fuenteDemanda}
+        alEditarMateria={alEditarMateria}
+        alEliminarMateria={alEliminarMateria}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line px-4 py-2.5">
         <Leyenda />
@@ -227,18 +237,36 @@ function Parametros({
   mp,
   acciones,
   fuenteDemanda,
+  alEditarMateria,
+  alEliminarMateria,
 }: {
   mp: MateriaPrima;
   acciones: AbastecimientoHook["acciones"];
   fuenteDemanda: string;
+  alEditarMateria: () => void;
+  alEliminarMateria: () => void;
 }) {
+  /** `{}` = agregar uno nuevo; `{ proveedor }` = editar ese. */
+  const [proveedorModal, setProveedorModal] = useState<{ proveedor?: Proveedor } | null>(null);
+
   return (
     <div className="px-4 py-3.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="text-base font-semibold text-ink">{mp.nombre}</h3>
-        <p className="text-xs text-ink-3">
-          Códigos SAP: <span className="num">{mp.codigosSap.join(", ")}</span> · {fuenteDemanda}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-ink">{mp.nombre}</h3>
+          <p className="mt-0.5 text-xs text-ink-3">
+            Códigos SAP: <span className="num">{mp.codigosSap.length > 0 ? mp.codigosSap.join(", ") : "sin código"}</span> ·{" "}
+            {fuenteDemanda}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Boton tamano="sm" variante="fantasma" icono={<Pencil className="size-3.5" />} onClick={alEditarMateria}>
+            Editar datos
+          </Boton>
+          <Boton tamano="sm" variante="fantasma" icono={<Trash2 className="size-3.5" />} onClick={alEliminarMateria}>
+            Eliminar
+          </Boton>
+        </div>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -309,19 +337,81 @@ function Parametros({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
-        <span className="rotulo text-ink-3">Tiempo de entrega (días)</span>
+        <span className="rotulo text-ink-3">Proveedores · entrega (días)</span>
         {mp.proveedores.map((p) => (
-          <label key={p.id} className="flex items-center gap-2 text-sm text-ink-2">
+          <div key={p.id} className="flex items-center gap-1.5 text-sm text-ink-2">
             <span className="max-w-48 truncate">{p.nombre}</span>
             <CampoCompacto
               valor={p.leadTimeDias}
               etiqueta={`Tiempo de entrega de ${p.nombre}`}
               alGuardar={(v) => acciones.actualizarLeadTime(mp.id, p.id, v)}
             />
-          </label>
+            <BotonMini titulo={`Editar ${p.nombre}`} onClick={() => setProveedorModal({ proveedor: p })}>
+              <Pencil className="size-3.5" />
+            </BotonMini>
+            <BotonMini
+              titulo={mp.proveedores.length <= 1 ? "No se puede quitar el único proveedor" : `Quitar ${p.nombre}`}
+              deshabilitado={mp.proveedores.length <= 1}
+              peligro
+              onClick={() => {
+                const conIngresos = Object.keys(mp.ingresos[p.id] ?? {}).length;
+                const aviso = conIngresos > 0 ? ` Se borrarán también sus ${conIngresos} ingreso${conIngresos === 1 ? "" : "s"} cargado${conIngresos === 1 ? "" : "s"}.` : "";
+                if (window.confirm(`¿Quitar a «${p.nombre}» de ${mp.nombre}?${aviso}`)) acciones.eliminarProveedor(mp.id, p.id);
+              }}
+            >
+              <Trash2 className="size-3.5" />
+            </BotonMini>
+          </div>
         ))}
+        <Boton tamano="sm" variante="fantasma" icono={<Plus className="size-3.5" />} onClick={() => setProveedorModal({})}>
+          Agregar proveedor
+        </Boton>
       </div>
+
+      {proveedorModal ? (
+        <FormProveedorModal
+          proveedor={proveedorModal.proveedor}
+          materiaNombre={mp.nombre}
+          nombresExistentes={mp.proveedores.filter((p) => p.id !== proveedorModal.proveedor?.id).map((p) => p.nombre)}
+          onCerrar={() => setProveedorModal(null)}
+          onGuardar={(datos) => {
+            if (proveedorModal.proveedor) acciones.actualizarProveedor(mp.id, proveedorModal.proveedor.id, datos);
+            else acciones.agregarProveedor(mp.id, datos);
+            setProveedorModal(null);
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function BotonMini({
+  titulo,
+  onClick,
+  children,
+  peligro,
+  deshabilitado,
+}: {
+  titulo: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  peligro?: boolean;
+  deshabilitado?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={titulo}
+      aria-label={titulo}
+      disabled={deshabilitado}
+      onClick={onClick}
+      className={cn(
+        "rounded p-1.5 text-ink-3 transition-colors pointer-coarse:p-2.5 disabled:cursor-not-allowed disabled:opacity-40",
+        peligro ? "hover:bg-bad-soft hover:text-bad" : "hover:bg-surface-3 hover:text-ink",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -396,7 +486,7 @@ function CampoCompacto({
       onKeyDown={(evento) => {
         if (evento.key === "Enter") evento.currentTarget.blur();
       }}
-      className={cn(clasesInput, "num h-8 w-16 text-right")}
+      className={cn(clasesInput, "num h-8 w-16! shrink-0 text-right")}
     />
   );
 }

@@ -6,7 +6,17 @@ import { abastecimientoStore, type EstadoAbastecimiento } from "@/lib/abastecimi
 
 export interface AbastecimientoHook {
   estado: EstadoAbastecimiento;
-  acciones: Omit<typeof abastecimientoStore, "suscribir" | "obtenerInstantanea" | "obtenerInstantaneaServidor">;
+  /** `true` si hay algún cambio que se pueda deshacer. */
+  puedeDeshacer: boolean;
+  acciones: Omit<
+    typeof abastecimientoStore,
+    | "suscribir"
+    | "obtenerInstantanea"
+    | "obtenerInstantaneaServidor"
+    | "puedeDeshacer"
+    | "puedeDeshacerServidor"
+    | "_reiniciarParaPruebas"
+  >;
 }
 
 /** Acceso al abastecimiento de materia prima desde React. */
@@ -16,5 +26,10 @@ export function useAbastecimiento(): AbastecimientoHook {
     abastecimientoStore.obtenerInstantanea,
     abastecimientoStore.obtenerInstantaneaServidor,
   );
-  return { estado, acciones: abastecimientoStore };
+  const puedeDeshacer = useSyncExternalStore(
+    abastecimientoStore.suscribir,
+    abastecimientoStore.puedeDeshacer,
+    abastecimientoStore.puedeDeshacerServidor,
+  );
+  return { estado, puedeDeshacer, acciones: abastecimientoStore };
 }

@@ -26,6 +26,8 @@ import type { Grado, Receta } from "@/lib/costos/types";
 import { cn } from "@/lib/utils";
 
 import { CompararModal } from "./CompararModal";
+import { navegarPestanas } from "@/lib/teclado";
+
 import { DetalleRecetaModal } from "./DetalleRecetaModal";
 import { InsumosPrecios } from "./InsumosPrecios";
 import { ImportarPreciosModal, ParametrosModal } from "./ModalesCostos";
@@ -143,7 +145,7 @@ export function CostosApp() {
           </div>
         </div>
 
-        <nav role="tablist" aria-label="Secciones de costos" className="mx-auto mt-2 flex w-full max-w-[96rem] gap-1 px-4 sm:px-6">
+        <nav role="tablist" aria-label="Secciones de costos" onKeyDown={navegarPestanas} className="mx-auto mt-2 flex w-full max-w-[96rem] gap-1 px-4 sm:px-6">
           {(
             [
               { clave: "resumen", etiqueta: "Resumen", icono: LayoutGrid },
@@ -155,6 +157,9 @@ export function CostosApp() {
               key={clave}
               type="button"
               role="tab"
+              id={`pestana-costos-${clave}`}
+              aria-controls="panel-costos"
+              tabIndex={vista === clave ? 0 : -1}
               aria-selected={vista === clave}
               onClick={() => setVista(clave)}
               className={cn(
@@ -172,7 +177,12 @@ export function CostosApp() {
       </header>
 
       {/* ------------------------------ Contenido ----------------------------- */}
-      <main className="mx-auto flex w-full max-w-[96rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
+      <main
+        id="panel-costos"
+        role="tabpanel"
+        aria-labelledby={`pestana-costos-${vista}`}
+        className="mx-auto flex w-full max-w-[96rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6"
+      >
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight text-ink">

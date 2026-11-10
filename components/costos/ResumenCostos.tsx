@@ -442,7 +442,7 @@ export function ResumenCostos({
                               )}
                             </td>
                             <td className="border-b border-line px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                              <div className="flex items-center justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
                                 <BotonIcono titulo="Editar receta" onClick={() => alEditar(receta)}>
                                   <Pencil className="size-3.5" />
                                 </BotonIcono>
@@ -496,7 +496,7 @@ function BotonIcono({
       title={titulo}
       aria-label={titulo}
       onClick={onClick}
-      className="rounded p-1.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink"
+      className="rounded p-1.5 text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink pointer-coarse:p-2.5"
     >
       {children}
     </button>

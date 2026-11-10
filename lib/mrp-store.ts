@@ -1,4 +1,5 @@
 import { CAMPOS_TEXTO, STORAGE_KEY } from "./constants";
+import { crearHistorial } from "./historial";
 import { REGISTROS_MOCK } from "./mock-data";
 import { migrarCantidades } from "./periodos";
 import type { CampoTextoMRP, MesKey, RegistroMRP } from "./types";
@@ -41,10 +42,14 @@ function persistir() {
  * cualquier cambio se persiste automáticamente.
  */
 function establecer(siguiente: RegistroMRP[]) {
+  if (siguiente !== estado) historial.registrar(estado);
   estado = siguiente;
   persistir();
   notificar();
 }
+
+/** Versiones anteriores de la lista, para «Deshacer». */
+const historial = crearHistorial<RegistroMRP[]>();
 
 /** Una probabilidad válida está en (0, 1]; cualquier otra cosa equivale a «sin ponderar». */
 function probabilidadValida(valor: unknown): number | undefined {
@@ -264,5 +269,24 @@ export const mrpStore = {
   /** Vacía por completo la lista de registros. */
   vaciar(): void {
     establecer([]);
+  },
+
+  /** Vuelve a la versión anterior de la lista. Devuelve `false` si no hay nada que deshacer. */
+  deshacer(): boolean {
+    const anterior = historial.deshacer();
+    if (!anterior) return false;
+    estado = anterior;
+    persistir();
+    notificar();
+    return true;
+  },
+
+  /** `true` si hay algún cambio que se pueda deshacer. */
+  puedeDeshacer(): boolean {
+    return historial.cantidad() > 0;
+  },
+
+  puedeDeshacerServidor(): boolean {
+    return false;
   },
 };
