@@ -1,9 +1,10 @@
 import { PERIODOS_STORAGE_KEY } from "./constants";
+import { enlazarDocumento, guardar } from "./persistencia";
 import { esClaveMes, mesesDePeriodo, PERIODO_INICIAL } from "./periodos";
 import type { Periodo } from "./types";
 
 /**
- * Periodos de seguimiento disponibles (store externo, persistido en localStorage).
+ * Periodos de seguimiento disponibles (store externo, persistido en la base de datos).
  *
  * Los registros guardan sus cantidades por mes (`AAAA-MM`); un periodo solo define
  * qué meses se muestran juntos. Quitar un periodo **no borra datos**: los meses siguen
@@ -13,7 +14,7 @@ import type { Periodo } from "./types";
 const POR_DEFECTO: Periodo[] = [PERIODO_INICIAL];
 
 let estado: Periodo[] = POR_DEFECTO;
-let hidratado = false;
+let iniciado = false;
 
 const oyentes = new Set<() => void>();
 
@@ -42,30 +43,20 @@ function depurar(valor: unknown): Periodo[] {
 function establecer(siguiente: Periodo[]) {
   const limpios = depurar(siguiente);
   estado = limpios.length > 0 ? limpios : POR_DEFECTO;
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(PERIODOS_STORAGE_KEY, JSON.stringify(estado));
-    } catch {
-      // Modo privado: se mantiene en memoria.
-    }
-  }
+  guardar(PERIODOS_STORAGE_KEY, estado);
   notificar();
 }
 
 function hidratar() {
-  if (hidratado || typeof window === "undefined") return;
-  hidratado = true;
-  try {
-    const crudo = window.localStorage.getItem(PERIODOS_STORAGE_KEY);
-    if (!crudo) return;
-    const limpios = depurar(JSON.parse(crudo));
+  if (iniciado || typeof window === "undefined") return;
+  iniciado = true;
+  void enlazarDocumento(PERIODOS_STORAGE_KEY, (crudo) => {
+    const limpios = depurar(crudo);
     if (limpios.length > 0) {
       estado = limpios;
       notificar();
     }
-  } catch {
-    // Datos corruptos: se continúa con el periodo inicial.
-  }
+  });
 }
 
 export const periodosStore = {

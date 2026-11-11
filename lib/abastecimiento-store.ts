@@ -4,11 +4,12 @@ import { CONSUMOS_SAP_SEMILLA, MB51_SEMILLA } from "./abastecimiento-consumos";
 import { MATERIAS_SEMILLA } from "./abastecimiento-semilla";
 import { ABASTECIMIENTO_STORAGE_KEY } from "./constants";
 import type { ResultadoMb51 } from "./mb51";
+import { enlazarDocumento, guardar } from "./persistencia";
 import type { MesKey } from "./types";
 import { generarId, normalizarTexto } from "./utils";
 
 /**
- * Abastecimiento de MP (store externo, persistido en localStorage): parámetros y movimientos de
+ * Abastecimiento de MP (store externo, persistido en la base de datos): parámetros y movimientos de
  * cada materia prima, y el consumo real leído del MB51.
  */
 
@@ -35,7 +36,7 @@ const SEMILLA: EstadoAbastecimiento = {
 };
 
 let estado: EstadoAbastecimiento = SEMILLA;
-let hidratado = false;
+let iniciado = false;
 
 /** Versiones anteriores del estado, para «Deshacer». */
 const historial = crearHistorial<EstadoAbastecimiento>();
@@ -210,30 +211,20 @@ export function depurar(valor: unknown): EstadoAbastecimiento | null {
 function establecer(siguiente: EstadoAbastecimiento) {
   if (siguiente !== estado) historial.registrar(estado);
   estado = siguiente;
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(ABASTECIMIENTO_STORAGE_KEY, JSON.stringify(estado));
-    } catch {
-      // Modo privado o sin espacio: se mantiene en memoria.
-    }
-  }
+  guardar(ABASTECIMIENTO_STORAGE_KEY, estado);
   notificar();
 }
 
 function hidratar() {
-  if (hidratado || typeof window === "undefined") return;
-  hidratado = true;
-  try {
-    const crudo = window.localStorage.getItem(ABASTECIMIENTO_STORAGE_KEY);
-    if (!crudo) return;
-    const limpio = depurar(JSON.parse(crudo));
+  if (iniciado || typeof window === "undefined") return;
+  iniciado = true;
+  void enlazarDocumento(ABASTECIMIENTO_STORAGE_KEY, (crudo) => {
+    const limpio = depurar(crudo);
     if (limpio) {
       estado = limpio;
       notificar();
     }
-  } catch {
-    // Datos corruptos: se continúa con los valores del Excel.
-  }
+  });
 }
 
 function cambiarMateria(id: string, cambio: (mp: MateriaPrima) => MateriaPrima) {
@@ -403,13 +394,7 @@ export const abastecimientoStore = {
     const anterior = historial.deshacer();
     if (!anterior) return false;
     estado = anterior;
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(ABASTECIMIENTO_STORAGE_KEY, JSON.stringify(estado));
-      } catch {
-        // Modo privado o sin espacio: se mantiene en memoria.
-      }
-    }
+    guardar(ABASTECIMIENTO_STORAGE_KEY, estado);
     notificar();
     return true;
   },

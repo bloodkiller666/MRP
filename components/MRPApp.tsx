@@ -71,6 +71,7 @@ import {
   mesesDePeriodo,
   periodosFaltantes,
 } from "@/lib/periodos";
+import { AvisoSync, EstadoSync } from "@/components/ui/EstadoSync";
 import { exportarRegistrosPDF } from "@/lib/pdfExport";
 import type { CampoTextoMRP, EstadoCumplimiento, FiltrosMRP, MesKey, Periodo, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -535,6 +536,8 @@ export function MRPApp() {
 
       </header>
 
+      <AvisoSync />
+
       {/* ------------------------------ Contenido ----------------------------- */}
       <main
         id="panel-vista"
@@ -704,13 +707,13 @@ export function MRPApp() {
             <FileSpreadsheet className="size-3.5" />
             {listo ? (
               <>
-                Datos guardados en este navegador ·{" "}
+                <EstadoSync /> ·{" "}
                 <span className="font-medium text-ink-2">
                   {registros.length} registro{registros.length === 1 ? "" : "s"}
                 </span>
               </>
             ) : (
-              "Cargando datos guardados…"
+              "Cargando datos…"
             )}
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">

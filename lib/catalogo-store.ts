@@ -1,4 +1,5 @@
 import { CAMPOS_TEXTO, CATALOGO_SEMILLA, CATALOGO_STORAGE_KEY } from "./constants";
+import { enlazarDocumento, guardar } from "./persistencia";
 import type { CampoTextoMRP, CatalogoMRP } from "./types";
 import { normalizarTexto } from "./utils";
 
@@ -15,8 +16,8 @@ import { normalizarTexto } from "./utils";
 /** Estado en memoria: copia profunda de la semilla para no mutar las constantes. */
 let estado: CatalogoMRP = clonar(CATALOGO_SEMILLA);
 
-/** Evita leer `localStorage` más de una vez por sesión de navegador. */
-let hidratado = false;
+/** Evita enlazar con la base de datos más de una vez por sesión de navegador. */
+let iniciado = false;
 
 const oyentes = new Set<() => void>();
 
@@ -38,12 +39,7 @@ function notificar() {
 }
 
 function persistir() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(CATALOGO_STORAGE_KEY, JSON.stringify(estado));
-  } catch {
-    // Cuota excedida o modo privado: el catálogo sigue vivo en memoria.
-  }
+  guardar(CATALOGO_STORAGE_KEY, estado);
 }
 
 /** Único punto de escritura: reemplaza, persiste y notifica. */
@@ -54,21 +50,14 @@ function establecer(siguiente: CatalogoMRP) {
 }
 
 /**
- * Carga la copia persistida la primera vez que un componente se suscribe.
+ * Aplica lo que llega de la base de datos.
  *
  * Lo guardado se **une** a la semilla, de forma que los catálogos base
- * (departamentos, refinerías, grupos línea, UM) nunca desaparecen aunque el
- * `localStorage` venga incompleto o de una versión anterior.
+ * (departamentos, refinerías, grupos línea, UM) nunca desaparecen aunque lo
+ * guardado venga incompleto o de una versión anterior.
  */
-function hidratar() {
-  if (hidratado || typeof window === "undefined") return;
-  hidratado = true;
-
+function aplicarRemoto(parseado: unknown) {
   try {
-    const crudo = window.localStorage.getItem(CATALOGO_STORAGE_KEY);
-    if (!crudo) return;
-
-    const parseado: unknown = JSON.parse(crudo);
     if (!parseado || typeof parseado !== "object" || Array.isArray(parseado)) return;
 
     const combinado = clonar(CATALOGO_SEMILLA);
@@ -91,6 +80,13 @@ function hidratar() {
   } catch {
     // Datos corruptos: se continúa con la semilla.
   }
+}
+
+/** Se enlaza con la base la primera vez que un componente se suscribe. */
+function hidratar() {
+  if (iniciado || typeof window === "undefined") return;
+  iniciado = true;
+  void enlazarDocumento(CATALOGO_STORAGE_KEY, aplicarRemoto);
 }
 
 export const catalogoStore = {

@@ -6,13 +6,13 @@ export function Bloque({ className }: { className?: string }) {
 }
 
 /**
- * Esqueleto de la vista de seguimiento mientras se leen los datos guardados del navegador.
+ * Esqueleto de la vista de seguimiento mientras se leen los datos de la base de datos.
  * Evita mostrar un instante los datos de ejemplo y que de pronto cambien por los reales.
  */
 export function EsqueletoSeguimiento() {
   return (
     <div role="status" aria-busy="true" className="flex flex-col gap-4">
-      <span className="sr-only">Cargando datos guardados…</span>
+      <span className="sr-only">Cargando datos…</span>
       <Bloque className="h-24 w-full rounded-xl" />
       <div className="flex flex-wrap gap-2">
         <Bloque className="h-10 w-full max-w-sm" />

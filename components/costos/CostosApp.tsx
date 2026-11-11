@@ -33,6 +33,7 @@ import { InsumosPrecios } from "./InsumosPrecios";
 import { ImportarPreciosModal, ParametrosModal } from "./ModalesCostos";
 import { RecetaFormModal } from "./RecetaFormModal";
 import { ResumenCostos } from "./ResumenCostos";
+import { AvisoSync, EstadoSync } from "@/components/ui/EstadoSync";
 
 type Vista = "resumen" | "insumos" | "cambios";
 
@@ -176,6 +177,8 @@ export function CostosApp() {
       <div className="franja-via" aria-hidden="true" />
       </header>
 
+      <AvisoSync />
+
       {/* ------------------------------ Contenido ----------------------------- */}
       <main
         id="panel-costos"
@@ -193,7 +196,7 @@ export function CostosApp() {
                 ? "Costo de cada variante con los precios vigentes a la fecha elegida."
                 : vista === "insumos"
                   ? "Cada cambio de precio se suma al historial; los anteriores se conservan."
-                  : "Quién cambió qué y cuándo (en este navegador)."}
+                  : "Quién cambió qué y cuándo (en la base de datos)."}
             </p>
           </div>
 
@@ -296,7 +299,7 @@ export function CostosApp() {
       <footer className="border-t border-line bg-surface/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[96rem] flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-3 text-xs text-ink-3 sm:px-6">
           <p>
-            {listo ? "Datos guardados en este navegador" : "Cargando datos guardados…"} ·{" "}
+            {listo ? <EstadoSync /> : "Cargando datos…"} ·{" "}
             <span className="font-medium text-ink-2">
               {datos.recetas.filter((r) => !r.archivada).length} recetas · {datos.insumos.length} insumos
             </span>

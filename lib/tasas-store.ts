@@ -1,13 +1,14 @@
 import { TASAS_STORAGE_KEY } from "./constants";
+import { enlazarDocumento, guardar } from "./persistencia";
 import { TASAS_SEMILLA, UNIDADES_ENTRADA, type TasaMP } from "./tasas";
 
 /**
- * Tasa de conversiones editable (store externo, persistido en localStorage).
+ * Tasa de conversiones editable (store externo, persistido en la base de datos).
  * Cada MP guarda su valor y su unidad de entrada; lo demás se calcula al mostrarlo.
  */
 
 let estado: TasaMP[] = TASAS_SEMILLA;
-let hidratado = false;
+let iniciado = false;
 
 const oyentes = new Set<() => void>();
 
@@ -31,30 +32,20 @@ function depurar(valor: unknown): TasaMP[] | null {
 
 function establecer(siguiente: TasaMP[]) {
   estado = siguiente;
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(TASAS_STORAGE_KEY, JSON.stringify(estado));
-    } catch {
-      // Modo privado: se mantiene en memoria.
-    }
-  }
+  guardar(TASAS_STORAGE_KEY, estado);
   notificar();
 }
 
 function hidratar() {
-  if (hidratado || typeof window === "undefined") return;
-  hidratado = true;
-  try {
-    const crudo = window.localStorage.getItem(TASAS_STORAGE_KEY);
-    if (!crudo) return;
-    const limpias = depurar(JSON.parse(crudo));
+  if (iniciado || typeof window === "undefined") return;
+  iniciado = true;
+  void enlazarDocumento(TASAS_STORAGE_KEY, (crudo) => {
+    const limpias = depurar(crudo);
     if (limpias) {
       estado = limpias;
       notificar();
     }
-  } catch {
-    // Datos corruptos: se continúa con los valores del Excel.
-  }
+  });
 }
 
 export const tasasStore = {

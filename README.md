@@ -121,21 +121,49 @@ lib/
   mrp-utils.ts          # totales, agrupaciones, filtrado, formato, opciones
   excel.ts              # importación / exportación (SheetJS)
   pdfExport.ts          # reporte PDF apaisado (jsPDF + autotable)
-  mrp-store.ts          # store externo de registros + localStorage
-  catalogo-store.ts     # store externo del catálogo dinámico + localStorage
-  columnas-store.ts     # store externo de columnas ocultas + localStorage
+  persistencia.ts       # lectura/guardado de documentos en la base (vía /api/datos)
+  servidor/db.ts        # acceso a Neon (solo servidor)
+  mrp-store.ts          # store externo de registros (persistido en la base)
+  catalogo-store.ts     # store externo del catálogo dinámico
+  columnas-store.ts     # store externo de columnas ocultas
   tema-store.ts         # store externo del tema + localStorage
   utils.ts              # normalización de texto, parseo de números, ids
 ```
 
-### Claves de `localStorage`
+### Base de datos (Neon)
+
+Los datos viven en **Neon (PostgreSQL)**, compartidos por todos los usuarios. Cada módulo es un
+documento JSON en la tabla `documentos` (`clave`, `valor jsonb`, `version`, `actualizado_en`),
+que se crea sola la primera vez. La API es `GET /api/datos` y `PUT /api/datos/[clave]`
+(`app/api/datos`, `lib/servidor/db.ts`); el cliente la usa desde `lib/persistencia.ts`.
+
+**Configuración:** crear `.env.local` con la cadena de conexión de Neon (no se sube a git):
+
+```
+DATABASE_URL=postgresql://usuario:clave@ep-xxxx.neon.tech/neondb?sslmode=require
+```
+
+En producción, la misma variable en el panel del hosting.
 
 | Clave | Contenido |
 | --- | --- |
-| `mrp:registros:v1` | Lista de registros del MRP |
-| `mrp:catalogo:v1` | Catálogo global de valores por campo |
-| `mrp:columnas:v1` | Columnas ocultas de la tabla |
-| `mrp:tema` | `"claro"` o `"oscuro"` |
+| `mrp:registros:v2` | Lista de registros del MRP |
+| `mrp:catalogo:v2` | Catálogo global de valores por campo |
+| `mrp:columnas:v3` | Columnas ocultas de la tabla |
+| `mrp:periodos:v1` | Periodos de seguimiento |
+| `mrp:tasas:v1` | Tasa de conversiones |
+| `mrp:abastecimiento:v1` | Materias primas, proveedores y MB51 |
+| `costos:v1` | Costos PLUS |
+
+Cómo se comporta:
+
+- No se guarda nada hasta haber leído la base, así una caída de conexión nunca pisa los datos reales.
+- Cada guardado lleva la versión que se leyó; si otra persona guardó antes, la API responde 409 y se
+  carga su versión (con aviso). Cada 30 s y al volver a la pestaña se traen los cambios de los demás.
+- **Migración:** si la base no tiene un documento pero el navegador lo tiene en `localStorage`
+  (versión anterior de la app), se sube una sola vez. Después manda la base.
+- Solo el tema (`mrp:tema`: `"claro"` u `"oscuro"`) sigue en `localStorage`: es una preferencia personal.
+- Todavía no hay inicio de sesión: quien tenga la URL puede ver y editar los datos.
 
 ## Modelo de datos
 
@@ -160,7 +188,7 @@ export interface RegistroMRP {
   ~900 KB no entran en el bundle inicial.
 - La descarga del `.xlsx` se arma con un `Blob` propio, así el export no depende
   de la detección de entorno de la librería.
-- `localStorage` se lee mediante un store externo (`useSyncExternalStore`), lo
+- Los datos se leen de la base mediante un store externo (`useSyncExternalStore`), lo
   que evita el `useEffect` de hidratación y mantiene el HTML del servidor
   idéntico al primer render del cliente.
 - El separador decimal/miles se interpreta con convención es-PE: `1,500` → 1500

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@neondatabase/serverless':
+        specifier: ^1.2.0
+        version: 1.2.0
       jspdf:
         specifier: ^4.2.1
         version: 4.2.1
@@ -441,6 +444,10 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+
+  '@neondatabase/serverless@1.2.0':
+    resolution: {integrity: sha512-tnaqgixUengZQNd9ZrS3ytQfamJzLKY8QxgqWQTNHHtB+KrFQWk77JTbbpg4RD+J3qE4eO2lVytvGDX5Kj6FdQ==}
+    engines: {node: '>=19.0.0'}
 
   '@next/env@16.3.6':
     resolution: {integrity: sha512-x9Vblze1EbtltQYnNH38xCPWU3TVfBd1eXqA3+w9+BTpedkkdNpAaltXlGQ/nsc1+E0mVTNrtcbX3GoO09zeLQ==}
@@ -3193,6 +3200,8 @@ snapshots:
       '@emnapi/runtime': 1.10.0
       '@tybys/wasm-util': 0.10.4
     optional: true
+
+  '@neondatabase/serverless@1.2.0': {}
 
   '@next/env@16.3.6': {}
 

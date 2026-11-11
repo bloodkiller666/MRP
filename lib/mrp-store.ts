@@ -1,5 +1,6 @@
 import { CAMPOS_TEXTO, STORAGE_KEY } from "./constants";
 import { crearHistorial } from "./historial";
+import { enlazarDocumento, guardar } from "./persistencia";
 import { REGISTROS_MOCK } from "./mock-data";
 import { migrarCantidades } from "./periodos";
 import type { CampoTextoMRP, MesKey, RegistroMRP } from "./types";
@@ -8,7 +9,7 @@ import { generarId, normalizarTexto } from "./utils";
 /**
  * Store del MRP basado en un "external store" de React.
  *
- * Se implementa fuera de los componentes para que `localStorage` se lea una
+ * Se implementa fuera de los componentes para que la base de datos se lea una
  * sola vez (evitando el patrón `useEffect` + `setState` de hidratación) y para
  * que el estado sobreviva a cualquier re-montaje de la UI. Los componentes se
  * suscriben con `useSyncExternalStore` desde `hooks/use-mrp-store.ts`.
@@ -17,7 +18,9 @@ import { generarId, normalizarTexto } from "./utils";
 /** Estado en memoria. Empieza con los datos mock para que el SSR sea estable. */
 let estado: RegistroMRP[] = REGISTROS_MOCK;
 
-/** Evita leer `localStorage` más de una vez por sesión de navegador. */
+/** Evita enlazar con la base de datos más de una vez por sesión de navegador. */
+let iniciado = false;
+/** `true` cuando ya se leyó la base (o se comprobó que no hay conexión). */
 let hidratado = false;
 
 const oyentes = new Set<() => void>();
@@ -27,14 +30,9 @@ function notificar() {
   for (const oyente of oyentes) oyente();
 }
 
-/** Guarda el estado actual en `localStorage` (silencioso si falla). */
+/** Pide guardar el estado actual en la base de datos (se agrupa con las ediciones siguientes). */
 function persistir() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
-  } catch {
-    // Cuota excedida o modo privado: la app sigue funcionando en memoria.
-  }
+  guardar(STORAGE_KEY, estado);
 }
 
 /**
@@ -84,24 +82,22 @@ function normalizar(registro: Partial<RegistroMRP>): RegistroMRP {
   };
 }
 
-/** Carga la copia persistida la primera vez que un componente se suscribe. */
+/** Aplica lo que llega de la base (carga inicial o cambios de otra persona). */
+function aplicarRemoto(crudo: unknown) {
+  // Una lista vacía es un estado válido (el usuario vació la tabla).
+  if (!Array.isArray(crudo)) return;
+  estado = crudo.filter(esObjeto).map(normalizar);
+  notificar();
+}
+
+/** Se enlaza con la base de datos la primera vez que un componente se suscribe. */
 function hidratar() {
-  if (hidratado || typeof window === "undefined") return;
-  hidratado = true;
-
-  try {
-    const crudo = window.localStorage.getItem(STORAGE_KEY);
-    if (!crudo) return;
-
-    const parseado: unknown = JSON.parse(crudo);
-    // Una lista vacía es un estado válido (el usuario vació la tabla).
-    if (Array.isArray(parseado)) {
-      estado = parseado.filter(esObjeto).map(normalizar);
-      notificar();
-    }
-  } catch {
-    // Datos corruptos: se continúa con los datos mock.
-  }
+  if (iniciado || typeof window === "undefined") return;
+  iniciado = true;
+  void enlazarDocumento(STORAGE_KEY, aplicarRemoto).then(() => {
+    hidratado = true;
+    notificar();
+  });
 }
 
 export const mrpStore = {
@@ -124,12 +120,12 @@ export const mrpStore = {
     return REGISTROS_MOCK;
   },
 
-  /** `true` cuando ya se intentó leer `localStorage`. */
+  /** `true` cuando ya se intentó leer la base de datos. */
   estaHidratado(): boolean {
     return hidratado;
   },
 
-  /** En el servidor todavía no hay nada persistido. */
+  /** En el servidor todavía no se leyó nada. */
   estaHidratadoServidor(): boolean {
     return false;
   },

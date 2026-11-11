@@ -1,10 +1,11 @@
+import { enlazarDocumento, guardar } from "../persistencia";
 import { generarId } from "../utils";
 import { formatearFecha } from "./calculo";
 import { INSUMOS_SEMILLA, RECETAS_SEMILLA } from "./seed";
 import type { CambioCosto, DatosCostos, Grado, Insumo, ParametrosCosto, PrecioInsumo, Receta } from "./types";
 
 /**
- * Almacén de la sección «Costos PLUS» (store externo, persistido en localStorage).
+ * Almacén de la sección «Costos PLUS» (store externo, persistido en la base de datos).
  *
  * Misma estrategia que el MRP: la copia en memoria se lee una sola vez, todo cambio pasa por
  * `establecer` (que persiste y notifica) y `useSyncExternalStore` evita desajustes de hidratación.
@@ -33,6 +34,8 @@ function datosIniciales(): DatosCostos {
 const SEMILLA: DatosCostos = datosIniciales();
 
 let estado: DatosCostos = SEMILLA;
+let iniciado = false;
+/** `true` cuando ya se leyó la base (o se comprobó que no hay conexión). */
 let hidratado = false;
 const oyentes = new Set<() => void>();
 
@@ -45,13 +48,7 @@ function establecer(siguiente: DatosCostos, cambio?: string) {
     ? [{ id: generarId(), cuando: new Date().toISOString(), texto: cambio }, ...siguiente.cambios].slice(0, MAX_CAMBIOS)
     : siguiente.cambios;
   estado = { ...siguiente, cambios };
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(COSTOS_STORAGE_KEY, JSON.stringify(estado));
-    } catch {
-      // Cuota excedida o modo privado: la sección sigue funcionando en memoria.
-    }
-  }
+  guardar(COSTOS_STORAGE_KEY, estado);
   notificar();
 }
 
@@ -110,19 +107,18 @@ function depurar(crudo: unknown): DatosCostos | null {
 }
 
 function hidratar() {
-  if (hidratado || typeof window === "undefined") return;
-  hidratado = true;
-  try {
-    const crudo = window.localStorage.getItem(COSTOS_STORAGE_KEY);
-    if (!crudo) return;
-    const datos = depurar(JSON.parse(crudo));
+  if (iniciado || typeof window === "undefined") return;
+  iniciado = true;
+  void enlazarDocumento(COSTOS_STORAGE_KEY, (crudo) => {
+    const datos = depurar(crudo);
     if (datos) {
       estado = datos;
       notificar();
     }
-  } catch {
-    // Datos corruptos: se continúa con la semilla.
-  }
+  }).then(() => {
+    hidratado = true;
+    notificar();
+  });
 }
 
 /* -------------------------------- Acciones -------------------------------- */
@@ -336,13 +332,7 @@ export const costosStore = {
 
   restaurar(): void {
     estado = datosIniciales();
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(COSTOS_STORAGE_KEY, JSON.stringify(estado));
-      } catch {
-        // sin persistencia
-      }
-    }
+    guardar(COSTOS_STORAGE_KEY, estado);
     notificar();
   },
 };

@@ -1,4 +1,5 @@
 import { COLUMNAS_OCULTABLES, COLUMNAS_OCULTAS_INICIALES, COLUMNAS_STORAGE_KEY } from "./constants";
+import { enlazarDocumento, guardar } from "./persistencia";
 import type { ColumnaTabla } from "./types";
 
 /**
@@ -20,7 +21,7 @@ const CLAVES_VALIDAS = new Set<string>(COLUMNAS_OCULTABLES);
 const COLUMNAS_OCULTAS_POR_DEFECTO: ColumnaTabla[] = [...COLUMNAS_OCULTAS_INICIALES];
 
 let estado: ColumnaTabla[] = COLUMNAS_OCULTAS_POR_DEFECTO;
-let hidratado = false;
+let iniciado = false;
 
 const oyentes = new Set<() => void>();
 
@@ -42,12 +43,7 @@ function notificar() {
 }
 
 function persistir() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(COLUMNAS_STORAGE_KEY, JSON.stringify(estado));
-  } catch {
-    // Modo privado: la preferencia sigue aplicándose en memoria.
-  }
+  guardar(COLUMNAS_STORAGE_KEY, estado);
 }
 
 /** Único punto de escritura: reemplaza, persiste y notifica. */
@@ -57,21 +53,15 @@ function establecer(siguiente: ColumnaTabla[]) {
   notificar();
 }
 
-/** Recupera las columnas ocultas guardadas (una lectura por sesión). */
+/** Recupera las columnas ocultas guardadas en la base de datos (una lectura por sesión). */
 function hidratar() {
-  if (hidratado || typeof window === "undefined") return;
-  hidratado = true;
-
-  try {
-    const crudo = window.localStorage.getItem(COLUMNAS_STORAGE_KEY);
-    if (!crudo) return;
-
+  if (iniciado || typeof window === "undefined") return;
+  iniciado = true;
+  void enlazarDocumento(COLUMNAS_STORAGE_KEY, (crudo) => {
     // Una lista vacía es válida: el usuario eligió ver todas las columnas.
-    estado = depurar(JSON.parse(crudo));
+    estado = depurar(crudo);
     notificar();
-  } catch {
-    // Datos corruptos: se continúa con todas las columnas visibles.
-  }
+  });
 }
 
 export const columnasStore = {
