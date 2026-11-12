@@ -63,7 +63,17 @@ export interface ConsumoSap {
   meses: Record<MesKey, number>;
 }
 
-export type OrigenConsumo = "real" | "manual" | "pronostico" | "promedio";
+export type OrigenConsumo = "real" | "manual" | "pronostico" | "promedio" | "stock";
+
+/** Stock real de una materia prima al cierre de un mes (o a una fecha, si el mes aún no cierra). */
+export interface StockRealMes {
+  /** Stock en TN. */
+  tn: number;
+  /** Fecha de la medición («2026-10-31»). */
+  fecha: string;
+  /** `true` = es el cierre del mes (último día): no cambia. `false` = a la fecha, puede seguir moviéndose. */
+  fijo: boolean;
+}
 
 export const MES_INICIO: MesKey = "2026-01";
 /** Enero 2026 a junio 2027: alcanza para cubrir los plazos de entrega de importación (hasta 95 días). */
@@ -113,6 +123,8 @@ export interface EntradaPlan {
   /** Consumo proyectado con la demanda (TN por mes), solo en los meses que tienen pronóstico. `null` = sin regla. */
   consumoPronosticado: Record<MesKey, number> | null;
   hoy: Date;
+  /** Stock real por mes (de los reportes de Suministro). Los de cierre de mes fijan el stock y el consumo se deduce. */
+  stockReal?: Record<MesKey, StockRealMes>;
 }
 
 export interface FilaMes {
@@ -138,6 +150,13 @@ export interface FilaMes {
   coberturaDias: number | null;
   /** Hay quiebre y todavía no se puede evitar con una compra (llegaría tarde). */
   quiebreInevitable: boolean;
+  /** Stock real medido para este mes, si lo hay. */
+  stockReal?: StockRealMes;
+  /**
+   * Con stock real de cierre: lo que sobró (+) o faltó (−) respecto de inicial + ingresos − consumo cuando el
+   * consumo deducido saldría negativo (ingresos sin anotar, p. ej.). 0 si todo cuadra.
+   */
+  ajusteStock: number;
 }
 
 export interface CompraSugerida {
@@ -177,7 +196,7 @@ export interface PlanMateria {
   costoTotal: number;
 }
 
-export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado, hoy }: EntradaPlan): PlanMateria {
+export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado, hoy, stockReal = {} }: EntradaPlan): PlanMateria {
   const meses = mesesDelPlan();
   const mesActual = claveDeFecha(hoy);
 
@@ -205,6 +224,24 @@ export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado,
   const ingresos = meses.map((mes) =>
     Object.values(mp.ingresos).reduce((suma, porMes) => suma + (porMes[mes] ?? 0), 0),
   );
+
+  /* 1b. Meses con stock real de cierre (fijo): mandan sobre el stock y el consumo se deduce de ellos. */
+  const ajuste: number[] = meses.map(() => 0);
+  {
+    let corrido = mp.stockInicialTn;
+    meses.forEach((mes, i) => {
+      const real = stockReal[mes];
+      if (real?.fijo) {
+        const deducido = redondear(corrido + ingresos[i] - real.tn);
+        consumo[i] = Math.max(0, deducido);
+        ajuste[i] = deducido < 0 ? -deducido : 0;
+        origen[i] = "stock";
+        corrido = real.tn;
+      } else {
+        corrido = redondear(corrido + ingresos[i] - consumo[i]);
+      }
+    });
+  }
 
   /* 2. Stock objetivo al cierre de cada mes. */
   const promedioSiguientes = (i: number, cantidad: number) => {
@@ -236,11 +273,12 @@ export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado,
 
   meses.forEach((mes, i) => {
     const stockInicial = conCompras;
-    sinCompras = redondear(sinCompras + ingresos[i] - consumo[i]);
-    const base = redondear(conCompras + ingresos[i] - consumo[i]);
+    const fijo = stockReal[mes]?.fijo ? stockReal[mes] : undefined;
+    sinCompras = fijo ? fijo.tn : redondear(sinCompras + ingresos[i] - consumo[i]);
+    const base = fijo ? fijo.tn : redondear(conCompras + ingresos[i] - consumo[i]);
 
     let lotes = 0;
-    if (i >= primerIndiceCompra && mp.loteMinTn > 0 && base < objetivo[i] - 1e-9) {
+    if (!fijo && i >= primerIndiceCompra && mp.loteMinTn > 0 && base < objetivo[i] - 1e-9) {
       lotes = Math.ceil((objetivo[i] - base) / mp.loteMinTn - 1e-9);
     }
     const sugerido = redondear(lotes * mp.loteMinTn);
@@ -264,6 +302,8 @@ export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado,
       stockObjetivo: objetivo[i],
       coberturaDias: mensual3 > 0 ? (Math.max(0, stockInicial) / mensual3) * 30 : null,
       quiebreInevitable,
+      stockReal: stockReal[mes],
+      ajusteStock: ajuste[i],
     });
 
     if (lotes > 0 && proveedor) {

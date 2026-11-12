@@ -37,6 +37,7 @@ const ORIGEN: Record<OrigenConsumo, { etiqueta: string; titulo: string }> = {
   manual: { etiqueta: "Manual", titulo: "Consumo escrito a mano" },
   pronostico: { etiqueta: "Pron.", titulo: "Proyectado con la demanda de Seguimiento × Tasa de conversiones" },
   promedio: { etiqueta: "Prom.", titulo: "Sin pronóstico: promedio de los últimos 3 meses" },
+  stock: { etiqueta: "Stock real", titulo: "Deducido del stock real de cierre: stock inicial + ingresos − stock real" },
 };
 
 const COL_ETIQUETA = "sticky left-0 z-[5] w-56 min-w-56 max-w-56 bg-surface px-3 text-left shadow-[inset_-1px_0_0_var(--line)]";
@@ -300,6 +301,32 @@ export function GrillaMateria({
               ))}
               {conTotal ? <CeldaTotal texto="–" /> : null}
             </tr>
+
+            {filas.some((f) => f.stockReal) ? (
+              <>
+                <FilaSimple
+                  etiqueta="Stock real (Suministro)"
+                  filas={filas}
+                  valor={(f) => (f.stockReal ? formatearTn(f.stockReal.tn) : "·")}
+                  total={total("–")}
+                  titulo="Stock medido por Suministro. Los cierres de mes son fijos; el de un mes en curso es a la fecha indicada y puede cambiar"
+                />
+                <tr>
+                  <Etiqueta titulo="Fecha de la medición. «a la fecha» = todavía no es el cierre del mes">Medición</Etiqueta>
+                  {filas.map((f) => (
+                    <td
+                      key={f.mes}
+                      className={cn(COL_MES, "border-b border-line py-2 text-[11px] text-ink-3", f.esMesActual && "bg-accent-soft/40")}
+                      title={f.ajusteStock > 0 ? `Ajuste: el stock real superó en ${formatearTn(f.ajusteStock)} TN a lo registrado (ingresos sin anotar)` : undefined}
+                    >
+                      {f.stockReal ? (f.stockReal.fijo ? "cierre" : `al ${f.stockReal.fecha.slice(8)}/${f.stockReal.fecha.slice(5, 7)}`) : ""}
+                      {f.ajusteStock > 0 ? " ▲" : ""}
+                    </td>
+                  ))}
+                  {conTotal ? <CeldaTotal texto="" /> : null}
+                </tr>
+              </>
+            ) : null}
 
             <FilaSimple
               etiqueta="Stock objetivo al cierre"

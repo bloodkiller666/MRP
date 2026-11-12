@@ -96,11 +96,16 @@ export async function construirLibroAbastecimiento(planes: PlanConMateria[], hoy
             ? "manual"
             : f.origenConsumo === "pronostico"
               ? "pronóstico"
-              : "promedio",
+              : f.origenConsumo === "stock"
+                ? "deducido del stock real"
+                : "promedio",
       ),
     ]);
     filas.push(["Ingresos confirmados", ...plan.filas.map((f) => redondear(f.ingresos))]);
     filas.push(["Compra sugerida", ...plan.filas.map((f) => redondear(f.sugerido))]);
+    if (plan.filas.some((f) => f.stockReal)) {
+      filas.push(["Stock real (Suministro)", ...plan.filas.map((f) => (f.stockReal ? redondear(f.stockReal.tn) : ""))]);
+    }
     filas.push(["Stock final sin compras", ...plan.filas.map((f) => redondear(f.stockFinalSinCompras))]);
     filas.push(["Stock final con compras", ...plan.filas.map((f) => redondear(f.stockFinal))]);
     filas.push(["Cobertura (días)", ...plan.filas.map((f) => (f.coberturaDias === null ? "" : Math.round(f.coberturaDias)))]);

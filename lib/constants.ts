@@ -218,6 +218,7 @@ export const TASAS_STORAGE_KEY = "mrp:tasas:v1";
 export const ABASTECIMIENTO_STORAGE_KEY = "mrp:abastecimiento:v1";
 export const CORTES_STORAGE_KEY = "mrp:cortes:v1";
 export const HISTORIAL_MP_STORAGE_KEY = "mrp:historial-mp:v1";
+export const STOCK_REAL_STORAGE_KEY = "mrp:stock-real:v1";
 
 /** Leyenda mostrada en el pie de la tabla y en las exportaciones. */
 export const ETIQUETA_TOTAL = "TOTAL";

@@ -6,8 +6,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAbastecimiento } from "@/hooks/use-abastecimiento";
 import { useCortes } from "@/hooks/use-cortes";
 import { useHistorialMp } from "@/hooks/use-historial-mp";
+import { useStockReal } from "@/hooks/use-stock-real";
 import { useTasas } from "@/hooks/use-tasas";
-import { calcularPlan, type CompraSugerida, type MateriaPrima } from "@/lib/abastecimiento";
+import { calcularPlan, MES_INICIO, type CompraSugerida, type MateriaPrima } from "@/lib/abastecimiento";
+import { esCierreDeMes, interpretarStockReal } from "@/lib/stock-real";
 import { exportarAbastecimientoExcel, type PlanConMateria } from "@/lib/abastecimiento-excel";
 import { exportarComprasPdf } from "@/lib/abastecimiento-pdf";
 import { consumoPronosticado, extraerDemanda } from "@/lib/abastecimiento-demanda";
@@ -47,6 +49,8 @@ interface Mensaje {
 export function AbastecimientoView({ registros }: PropsAbastecimiento) {
   const { estado, acciones, puedeDeshacer } = useAbastecimiento();
   const { historial } = useHistorialMp();
+  const { stockReal, importar: importarStockReal } = useStockReal();
+  const entradaStock = useRef<HTMLInputElement>(null);
   const historialHasta = historial.cortes.at(-1)?.mes ?? null;
   const { tasas } = useTasas();
   // Mes de hoy: la vista solo se monta al abrir la pestaña, así que no choca con la hidratación.
@@ -108,13 +112,17 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
         }
       }
       const pronostico = consumoPronosticado(mp, demanda, tasas);
+      const stockRealMp = stockReal.porMp[mp.id];
+      // Con stock real, el stock de arranque es el de apertura de enero que trae el Excel mensual (si lo hay).
+      const aperturaExcel = stockRealMp ? historial.series[mp.id]?.meses[MES_INICIO]?.stockInicial : undefined;
+      const mpPlan = aperturaExcel === undefined ? mp : { ...mp, stockInicialTn: aperturaExcel };
       return {
         mp,
-        plan: calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado: pronostico, hoy }),
+        plan: calcularPlan({ mp: mpPlan, consumoSap, mesesConSap, consumoPronosticado: pronostico, hoy, stockReal: stockRealMp }),
         fuente: describirFuente(mp, tasas),
       };
     });
-  }, [estado, demanda, tasas, hoy]);
+  }, [estado, demanda, tasas, hoy, stockReal, historial]);
 
   const compras = useMemo(() => planes.flatMap(({ plan }) => plan.compras), [planes]);
   const enQuiebre = planes.filter(({ plan }) => plan.mesesEnQuiebre > 0);
@@ -140,6 +148,39 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
       });
     } catch (error) {
       setMensaje({ tipo: "error", texto: error instanceof Error ? error.message : "No se pudo leer el archivo." });
+    } finally {
+      setImportando(false);
+    }
+  };
+
+  /** Excel de stocks de Suministro: cierres de mes (fijos) y, si trae, una medición a la fecha. */
+  const alImportarStock = async (archivo: File) => {
+    setImportando(true);
+    setMensaje(null);
+    try {
+      const XLSX = await import("xlsx");
+      const libro = XLSX.read(await archivo.arrayBuffer(), { type: "array", cellDates: true });
+      const lectura = interpretarStockReal(
+        XLSX,
+        libro,
+        estado.materias.map((m) => ({ id: m.id, nombre: m.nombre, tasaMp: m.tasaMp })),
+      );
+      const cantidad = Object.keys(lectura.porMp).length;
+      if (cantidad === 0) throw new Error(lectura.avisos[0] ?? "No se encontró ningún stock en el archivo.");
+      const hasta = lectura.fechas.at(-1) ?? "";
+      importarStockReal(lectura.porMp, archivo.name, hasta);
+      const fijos = lectura.fechas.filter((f) => esCierreDeMes(f)).length;
+      const parcial = lectura.fechas.length - fijos;
+      setMensaje({
+        tipo: "ok",
+        texto:
+          `Stock real cargado: ${cantidad} materias primas, ${fijos} cierre${fijos === 1 ? "" : "s"} de mes` +
+          (parcial > 0 ? ` y ${parcial} medición${parcial === 1 ? "" : "es"} a la fecha (hasta el ${formatearFechaIso(hasta)}, aún puede cambiar)` : "") +
+          "." +
+          (lectura.avisos.length > 0 ? ` ${lectura.avisos.join(" ")}` : ""),
+      });
+    } catch (error) {
+      setMensaje({ tipo: "error", texto: error instanceof Error ? error.message : "No se pudo leer el archivo de stock." });
     } finally {
       setImportando(false);
     }
@@ -205,6 +246,28 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
             title="Carga el reporte MB51 de SAP con los movimientos 261 y 262"
           >
             {importando ? "Leyendo MB51…" : "Importar MB51 (SAP)"}
+          </Boton>
+          <input
+            ref={entradaStock}
+            type="file"
+            accept=".xlsx,.xls"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label="Excel de stock real"
+            onChange={(evento) => {
+              const archivo = evento.target.files?.[0];
+              evento.target.value = "";
+              if (archivo) void alImportarStock(archivo);
+            }}
+          />
+          <Boton
+            variante="secundario"
+            icono={<Upload className="size-4" />}
+            disabled={importando}
+            onClick={() => entradaStock.current?.click()}
+            title="Carga el Excel de stocks de Suministro: los cierres de mes quedan fijos y la última fecha se puede actualizar"
+          >
+            Importar stock real
           </Boton>
           <Boton
             variante="secundario"
