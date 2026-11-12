@@ -5,7 +5,7 @@ import type {
   EstadoCumplimiento,
   FiltrosMRP,
 } from "./types";
-import { ADITIVOS, EMULSIONES, POLIMEROS, TIPOS_PEN } from "./mezclas";
+import { ADITIVOS, EMULSIONES, OTROS_ADITIVOS, POLIMEROS, TIPOS_PEN } from "./mezclas";
 
 /** Etiquetas legibles de cada campo de texto del registro. */
 export const ETIQUETAS_CAMPO: Record<CampoTextoMRP, string> = {
@@ -22,6 +22,7 @@ export const ETIQUETAS_CAMPO: Record<CampoTextoMRP, string> = {
   emulsion: "Tipo de emulsión",
   polimero: "Polímero",
   aditivo: "Aditivo",
+  otrosAditivos: "Otros aditivos",
 };
 
 /** Orden de los campos de texto en tablas, formularios y exportaciones. */
@@ -33,6 +34,7 @@ export const CAMPOS_TEXTO: CampoTextoMRP[] = [
   "emulsion",
   "polimero",
   "aditivo",
+  "otrosAditivos",
   "tipoPen",
   "unidadMedida",
   "departamento",
@@ -134,7 +136,7 @@ export const GRUPOS_COLUMNAS: ReadonlyArray<{
   },
   {
     titulo: "Mezcla del producto",
-    columnas: ["emulsion", "polimero", "aditivo", "tipoPen"],
+    columnas: ["emulsion", "polimero", "aditivo", "otrosAditivos", "tipoPen"],
   },
   {
     titulo: "Datos de la obra y del producto",
@@ -160,6 +162,7 @@ export const CATALOGO_SEMILLA: CatalogoMRP = {
   emulsion: [...EMULSIONES],
   polimero: [...POLIMEROS],
   aditivo: [...ADITIVOS],
+  otrosAditivos: [...OTROS_ADITIVOS],
 };
 
 /** Estado inicial de los filtros (todos vacíos = sin filtro). */
@@ -177,6 +180,7 @@ export const FILTROS_INICIALES: FiltrosMRP = {
   emulsion: "",
   polimero: "",
   aditivo: "",
+  otrosAditivos: "",
 };
 
 /* -------------------------------------------------------------------------- */
@@ -212,6 +216,8 @@ export const COLUMNAS_STORAGE_KEY = "mrp:columnas:v3";
 export const PERIODOS_STORAGE_KEY = "mrp:periodos:v1";
 export const TASAS_STORAGE_KEY = "mrp:tasas:v1";
 export const ABASTECIMIENTO_STORAGE_KEY = "mrp:abastecimiento:v1";
+export const CORTES_STORAGE_KEY = "mrp:cortes:v1";
+export const HISTORIAL_MP_STORAGE_KEY = "mrp:historial-mp:v1";
 
 /** Leyenda mostrada en el pie de la tabla y en las exportaciones. */
 export const ETIQUETA_TOTAL = "TOTAL";

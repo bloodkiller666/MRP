@@ -42,6 +42,8 @@ export interface RegistroMRP {
   polimero: string;
   /** Aditivo (aceite crudo de palma…). Vacío = lo dicta la regla. */
   aditivo: string;
+  /** Otros aditivos que lleve el producto (texto libre, p. ej. ITERTIX). */
+  otrosAditivos: string;
   /** Pronóstico de demanda por mes. */
   proyecciones: CantidadesMes;
   /** Despacho real (meses cerrados) + avance (mes en curso). */

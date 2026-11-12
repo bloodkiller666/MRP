@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import type { MateriaPrima, ReglaDemanda } from "@/lib/abastecimiento";
 import type { DatosMateriaNueva } from "@/lib/abastecimiento-store";
-import { ADITIVOS, EMULSIONES, POLIMEROS } from "@/lib/mezclas";
+import { ADITIVOS, EMULSIONES, OTROS_ADITIVOS, POLIMEROS } from "@/lib/mezclas";
 import { normalizarTexto, parsearNumero } from "@/lib/utils";
 
 import { Boton } from "../ui/Boton";
@@ -17,12 +17,14 @@ const VALORES_POR_CAMPO: Record<ReglaDemanda["campo"], string[]> = {
   emulsion: EMULSIONES,
   polimero: POLIMEROS,
   aditivo: ADITIVOS,
+  otrosAditivos: OTROS_ADITIVOS,
 };
 
 const ETIQUETA_CAMPO: Record<ReglaDemanda["campo"], string> = {
   emulsion: "Tipo de emulsión",
   polimero: "Polímero",
   aditivo: "Aditivo",
+  otrosAditivos: "Otros aditivos",
 };
 
 /** Resultado del formulario: en «editar» solo trae la parte de identificación. */

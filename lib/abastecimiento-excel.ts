@@ -1,6 +1,6 @@
 import { descargarArchivo, nombreArchivoExportado } from "./excel";
 import type { CompraSugerida, MateriaPrima, PlanMateria } from "./abastecimiento";
-import { etiquetaMesAnio } from "./periodos";
+import { etiquetaMes, etiquetaMesAnio, gruposPorAnio } from "./periodos";
 
 /**
  * Exportación a Excel del abastecimiento: el reporte de compras sugeridas y el MRP de cada
@@ -70,10 +70,21 @@ export async function construirLibroAbastecimiento(planes: PlanConMateria[], hoy
   XLSX.utils.book_append_sheet(libro, hojaCompras, "Compras sugeridas");
 
   /* Hoja 2: el MRP de cada MP, un bloque por materia prima. */
+  // Cada bloque lleva dos filas de cabecera: el año (celda combinada sobre sus meses) y el mes.
   const filas: (string | number)[][] = [["MRP de materia prima (TN) · stock negativo = quiebre"]];
+  const combinaciones: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
   for (const { mp, plan } of planes) {
-    const mesesTexto = plan.filas.map((f) => etiquetaMesAnio(f.mes));
-    filas.push([], [mp.nombre, ...mesesTexto]);
+    const meses = plan.filas.map((f) => f.mes);
+    const filaAnio: (string | number)[] = [mp.nombre];
+    let columna = 1;
+    for (const grupo of gruposPorAnio(meses)) {
+      filaAnio[columna] = grupo.anio;
+      if (grupo.cantidad > 1) {
+        combinaciones.push({ s: { r: filas.length + 1, c: columna }, e: { r: filas.length + 1, c: columna + grupo.cantidad - 1 } });
+      }
+      columna += grupo.cantidad;
+    }
+    filas.push([], filaAnio, ["Mes", ...meses.map((m) => etiquetaMes(m))]);
     filas.push(["Stock inicial", ...plan.filas.map((f) => redondear(f.stockInicial))]);
     filas.push(["Consumo", ...plan.filas.map((f) => redondear(f.consumo))]);
     filas.push([
@@ -95,6 +106,7 @@ export async function construirLibroAbastecimiento(planes: PlanConMateria[], hoy
     filas.push(["Cobertura (días)", ...plan.filas.map((f) => (f.coberturaDias === null ? "" : Math.round(f.coberturaDias)))]);
   }
   const hojaMrp = XLSX.utils.aoa_to_sheet(filas);
+  hojaMrp["!merges"] = combinaciones;
   hojaMrp["!cols"] = [{ wch: 30 }, ...Array.from({ length: 18 }, () => ({ wch: 11 }))];
   XLSX.utils.book_append_sheet(libro, hojaMrp, "MRP por materia prima");
 

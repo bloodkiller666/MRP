@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { formatearNumero } from "@/lib/mrp-utils";
 import { cn, parsearNumero } from "@/lib/utils";
 
+import { useSoloLectura } from "./ui/SoloLectura";
+
 interface CeldaEditableProps {
   /** Valor actual; `undefined` se muestra como celda vacía. */
   valor: string | number | undefined;
@@ -46,6 +48,7 @@ export function EditableCell({
   anchoTexto = "max-w-[18rem]",
   className,
 }: CeldaEditableProps) {
+  const soloLectura = useSoloLectura();
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState("");
   const [invalido, setInvalido] = useState(false);
@@ -60,6 +63,7 @@ export function EditableCell({
   }, [editando]);
 
   const iniciarEdicion = () => {
+    if (soloLectura) return;
     setBorrador(valor === undefined || valor === null ? "" : String(valor));
     setInvalido(false);
     setEditando(true);

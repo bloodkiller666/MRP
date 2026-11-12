@@ -101,6 +101,7 @@ function r(n: number, fila: Fila, proyecciones: Record<string, number>): Registr
     emulsion: "",
     polimero: "",
     aditivo: "",
+    otrosAditivos: "",
     proyecciones: migrarCantidades(proyecciones),
     reales: {},
   };

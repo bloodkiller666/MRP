@@ -125,7 +125,7 @@ function depurarMateria(valor: unknown, base: MateriaPrima): MateriaPrima {
   const regla =
     v.regla === null
       ? null
-      : v.regla && typeof v.regla.valor === "string" && ["emulsion", "polimero", "aditivo"].includes(v.regla.campo)
+      : v.regla && typeof v.regla.valor === "string" && ["emulsion", "polimero", "aditivo", "otrosAditivos"].includes(v.regla.campo)
         ? { campo: v.regla.campo, valor: v.regla.valor }
         : base.regla;
   return {

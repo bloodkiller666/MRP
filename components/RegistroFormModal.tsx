@@ -47,6 +47,7 @@ const SECCION_PRODUCTO: CampoTextoMRP[] = [
   "emulsion",
   "polimero",
   "aditivo",
+  "otrosAditivos",
 ];
 
 /** Campos obligatorios y su mensaje de error. */
@@ -179,6 +180,9 @@ export function RegistroFormModal({
       detalleProducto: borrador.detalleProducto,
       departamento: borrador.departamento,
       tipoPen: borrador.tipoPen,
+      cuenta: borrador.cuenta,
+      tipoAplicacion: borrador.tipoAplicacion,
+      grupoLinea: borrador.grupoLinea,
     });
     const propio = (valor: string, deRegla: string) => (valor.trim() === deRegla ? "" : valor.trim());
 
@@ -196,6 +200,7 @@ export function RegistroFormModal({
       emulsion: propio(borrador.emulsion, regla.emulsion),
       polimero: propio(borrador.polimero, regla.polimero),
       aditivo: propio(borrador.aditivo, regla.aditivo),
+      otrosAditivos: propio(borrador.otrosAditivos, regla.otrosAditivos),
       proyecciones: leerMeses("pron"),
       reales: leerMeses("real"),
     });

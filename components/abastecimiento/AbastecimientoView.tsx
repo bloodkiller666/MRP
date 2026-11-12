@@ -1,9 +1,11 @@
 "use client";
 
-import { AlertTriangle, FileSpreadsheet, Plus, RotateCcw, Undo2, Upload } from "lucide-react";
+import { AlertTriangle, Download, FileSpreadsheet, Plus, RotateCcw, Undo2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAbastecimiento } from "@/hooks/use-abastecimiento";
+import { useCortes } from "@/hooks/use-cortes";
+import { useHistorialMp } from "@/hooks/use-historial-mp";
 import { useTasas } from "@/hooks/use-tasas";
 import { calcularPlan, type CompraSugerida, type MateriaPrima } from "@/lib/abastecimiento";
 import { exportarAbastecimientoExcel, type PlanConMateria } from "@/lib/abastecimiento-excel";
@@ -20,11 +22,12 @@ import { cn } from "@/lib/utils";
 import { Boton } from "../ui/Boton";
 import { formatearFechaIso, formatearTn } from "./formato";
 import { FormMateriaModal, type ResultadoFormMateria } from "./FormMateriaModal";
+import { DemandaPorCliente } from "./DemandaPorCliente";
 import { GrillaMateria } from "./GrillaMateria";
 import { ReporteCompras } from "./ReporteCompras";
 
 interface PropsAbastecimiento {
-  /** Todos los registros de la demanda, con la mezcla (emulsión, polímero, aditivo) ya aplicada. */
+  /** Registros actuales de Seguimiento, con la mezcla (emulsión, polímero, aditivo) ya aplicada. */
   registros: RegistroMRP[];
 }
 
@@ -43,6 +46,8 @@ interface Mensaje {
  */
 export function AbastecimientoView({ registros }: PropsAbastecimiento) {
   const { estado, acciones, puedeDeshacer } = useAbastecimiento();
+  const { historial } = useHistorialMp();
+  const historialHasta = historial.cortes.at(-1)?.mes ?? null;
   const { tasas } = useTasas();
   // Mes de hoy: la vista solo se monta al abrir la pestaña, así que no choca con la hidratación.
   const [hoy] = useState(() => new Date());
@@ -71,7 +76,17 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
     return () => window.removeEventListener("keydown", alPresionar);
   }, [acciones]);
 
-  const demanda = useMemo(() => extraerDemanda(registros), [registros]);
+  // De dónde sale la demanda: por defecto, la «Base de datos» del último corte mensual importado. El corte trae
+  // la emulsión, el polímero y el aditivo tal como los asignó el Excel, así que se usan sin completar con reglas.
+  const { cortes } = useCortes();
+  const mesesCorte = Object.keys(cortes).sort();
+  const [fuenteElegida, setFuenteElegida] = useState<MesKey | "actual" | null>(null);
+  const fuente: MesKey | "actual" =
+    fuenteElegida !== null && (fuenteElegida === "actual" || cortes[fuenteElegida]) ? fuenteElegida : (mesesCorte.at(-1) ?? "actual");
+  const registrosDemanda = fuente === "actual" ? registros : (cortes[fuente]?.registros ?? registros);
+  const origenDemanda = fuente === "actual" ? "datos actuales" : `corte de ${etiquetaMesAnio(fuente)}`;
+  const demanda = useMemo(() => extraerDemanda(registrosDemanda), [registrosDemanda]);
+  const mesesDemanda = useMemo(() => [...demanda.mesesConPronostico].sort(), [demanda]);
 
   /** Materiales del MB51 que no suman a ninguna materia prima: se pueden dar de alta con un clic. */
   const sinMateria = useMemo(() => {
@@ -151,6 +166,24 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {mesesCorte.length > 0 ? (
+            <label className="flex items-center gap-2">
+              <span className="rotulo hidden text-ink-2 sm:inline">Demanda de</span>
+              <select
+                aria-label="Fuente de la demanda: datos actuales o un corte mensual"
+                value={fuente}
+                onChange={(evento) => setFuenteElegida(evento.target.value as MesKey | "actual")}
+                className="h-9 cursor-pointer rounded-lg border border-line-strong bg-surface pr-8 pl-2.5 text-sm font-medium text-ink"
+              >
+                {mesesCorte.map((mes) => (
+                  <option key={mes} value={mes}>
+                    Base de datos · corte de {etiquetaMesAnio(mes)}
+                  </option>
+                ))}
+                <option value="actual">Datos actuales de Seguimiento</option>
+              </select>
+            </label>
+          ) : null}
           <input
             ref={entradaArchivo}
             type="file"
@@ -180,6 +213,15 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
             title="Da de alta una materia prima nueva con su proveedor"
           >
             Nueva materia prima
+          </Boton>
+          <Boton
+            variante="secundario"
+            icono={<Download className="size-4" />}
+            onClick={() => void exportarAbastecimientoExcel(planes, hoy)}
+            disabled={planes.length === 0}
+            title="Descarga el MRP de cada materia prima (con año y meses) y las compras sugeridas"
+          >
+            Exportar tabla a Excel
           </Boton>
           <Boton
             variante="fantasma"
@@ -328,6 +370,11 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
               plan={materiaElegida.plan}
               acciones={acciones}
               fuenteDemanda={materiaElegida.fuente}
+              historial={historial.series[materiaElegida.mp.id]}
+              historialHasta={historialHasta}
+              demandaPorCliente={
+                <DemandaPorCliente mp={materiaElegida.mp} registros={registrosDemanda} meses={mesesDemanda} origen={origenDemanda} />
+              }
               alEditarMateria={() => setModalMateria({ modo: "editar", id: materiaElegida.mp.id })}
               alEliminarMateria={() => {
                 const { mp } = materiaElegida;

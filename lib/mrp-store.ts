@@ -54,12 +54,12 @@ function probabilidadValida(valor: unknown): number | undefined {
   return typeof valor === "number" && valor > 0 && valor <= 1 ? valor : undefined;
 }
 
-function esObjeto(valor: unknown): valor is Partial<RegistroMRP> {
+export function esObjeto(valor: unknown): valor is Partial<RegistroMRP> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
 }
 
 /** Completa los campos que pudieran faltar en datos guardados por versiones anteriores. */
-function normalizar(registro: Partial<RegistroMRP>): RegistroMRP {
+export function normalizar(registro: Partial<RegistroMRP>): RegistroMRP {
   return {
     id: registro.id ?? generarId(),
     propietario: registro.propietario ?? "",
@@ -75,6 +75,7 @@ function normalizar(registro: Partial<RegistroMRP>): RegistroMRP {
     emulsion: registro.emulsion ?? "",
     polimero: registro.polimero ?? "",
     aditivo: registro.aditivo ?? "",
+    otrosAditivos: registro.otrosAditivos ?? "",
     proyecciones: migrarCantidades(registro.proyecciones),
     reales: migrarCantidades(registro.reales),
     probabilidad: probabilidadValida(registro.probabilidad),

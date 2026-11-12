@@ -12,7 +12,7 @@ import {
   lunesDelMes,
   nombreMes,
 } from "@/lib/periodos";
-import type { MesKey, RegistroMRP } from "@/lib/types";
+import type { CampoTextoMRP, MesKey, RegistroMRP } from "@/lib/types";
 import { cn, parsearNumero } from "@/lib/utils";
 
 import { EstadoPastilla } from "./Semaforo";
@@ -29,7 +29,19 @@ interface PropsCaptura {
   alActualizarProyeccion: (id: string, mes: MesKey, valor?: number) => void;
   alActualizarProbabilidad: (id: string, probabilidad?: number) => void;
   alActualizarComentario: (id: string, comentario: string) => void;
+  /** Guarda un campo de texto (emulsión, polímero, aditivo, refinería). */
+  alActualizarCampo: (id: string, campo: CampoTextoMRP, valor: string) => void;
+  /** Valores conocidos de cada campo, para sugerir mientras se escribe. */
+  opciones: Record<CampoTextoMRP, string[]>;
 }
+
+/** Datos del producto que el vendedor completa aquí mismo (se escriben o se eligen de la lista). */
+const CAMPOS_PRODUCTO: ReadonlyArray<{ campo: CampoTextoMRP; titulo: string }> = [
+  { campo: "emulsion", titulo: "Tipo de emulsión" },
+  { campo: "polimero", titulo: "Polímero" },
+  { campo: "aditivo", titulo: "Aditivo" },
+  { campo: "refineria", titulo: "Refinería" },
+];
 
 const POR_PAGINA = 60;
 
@@ -86,6 +98,8 @@ export function CapturaReal({
   alActualizarProyeccion,
   alActualizarProbabilidad,
   alActualizarComentario,
+  alActualizarCampo,
+  opciones,
 }: PropsCaptura) {
   const [modo, setModo] = useState<Modo>("real");
   const [mesElegido, setMesElegido] = useState<MesKey | "">("");
@@ -149,6 +163,17 @@ export function CapturaReal({
       return;
     }
     alActualizarProbabilidad(registro.id, fraccion >= 1 ? undefined : fraccion);
+    marcarGuardado(registro);
+  };
+
+  /** Guarda un dato del producto escrito a mano; vacío lo borra (la regla de mezcla vuelve a completarlo). */
+  const guardarCampo = (registro: RegistroMRP, campoTexto: CampoTextoMRP, entrada: HTMLInputElement) => {
+    const nuevo = entrada.value.replace(/\s+/g, " ").trim().toUpperCase();
+    if (nuevo === registro[campoTexto]) {
+      entrada.value = registro[campoTexto];
+      return;
+    }
+    alActualizarCampo(registro.id, campoTexto, nuevo);
     marcarGuardado(registro);
   };
 
@@ -301,6 +326,13 @@ export function CapturaReal({
       </header>
 
       <div ref={contenedor} className="max-h-[min(68vh,46rem)] overflow-auto">
+        {CAMPOS_PRODUCTO.map(({ campo: c }) => (
+          <datalist key={c} id={`captura-lista-${c}`}>
+            {opciones[c].map((valor) => (
+              <option key={valor} value={valor} />
+            ))}
+          </datalist>
+        ))}
         <table className="w-full border-separate border-spacing-0 text-[13px] sm:min-w-[50rem]">
           <thead>
             <tr className="text-left">
@@ -309,6 +341,11 @@ export function CapturaReal({
                   key={titulo}
                   className={cn(TH_BASE, "bg-surface-2 text-ink-2", titulo !== "Cliente" && "hidden sm:table-cell")}
                 >
+                  {titulo}
+                </th>
+              ))}
+              {CAMPOS_PRODUCTO.map(({ campo: c, titulo }) => (
+                <th key={c} className={cn(TH_BASE, "hidden w-36 bg-surface-2 text-ink-2 lg:table-cell")}>
                   {titulo}
                 </th>
               ))}
@@ -348,7 +385,7 @@ export function CapturaReal({
           <tbody>
             {visibles.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-14 text-center">
+                <td colSpan={13} className="px-4 py-14 text-center">
                   <Inbox className="mx-auto mb-3 size-8 text-line-strong" />
                   <p className="text-sm font-medium text-ink">
                     {soloPendientes ? "No quedan pendientes en este mes" : "No hay registros que coincidan"}
@@ -389,6 +426,24 @@ export function CapturaReal({
                     <td className="hidden border-b border-line px-3 py-1.5 text-ink-2 sm:table-cell">
                       {registro.unidadMedida}
                     </td>
+
+                    {CAMPOS_PRODUCTO.map(({ campo: c, titulo }) => (
+                      <td key={c} className="hidden border-b border-line px-2 py-1 lg:table-cell">
+                        <input
+                          key={`${registro.id}-${c}-${registro[c]}`}
+                          data-col={c}
+                          list={`captura-lista-${c}`}
+                          defaultValue={registro[c]}
+                          placeholder="—"
+                          autoComplete="off"
+                          aria-label={`${titulo} · ${registro.cuenta} · ${registro.detalleProducto}`}
+                          onFocus={(evento) => evento.currentTarget.select()}
+                          onBlur={(evento) => guardarCampo(registro, c, evento.currentTarget)}
+                          onKeyDown={(evento) => manejarTeclas(evento, (entrada) => guardarCampo(registro, c, entrada), registro[c])}
+                          className="h-8 w-full min-w-28 rounded-md border border-field bg-surface px-2 text-sm text-ink placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+                        />
+                      </td>
+                    ))}
 
                     {esReal ? (
                       <>

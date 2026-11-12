@@ -4,6 +4,7 @@ import {
   BarChart3,
   Boxes,
   CheckCircle2,
+  History,
   ClipboardPenLine,
   Download,
   FileSpreadsheet,
@@ -25,6 +26,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AbastecimientoView } from "@/components/abastecimiento/AbastecimientoView";
 import { ColumnasSelector } from "@/components/ColumnasSelector";
 import { Dashboard } from "@/components/Dashboard";
+import { ImportarCorteModal } from "@/components/ImportarCorteModal";
+import { SoloLecturaContext } from "@/components/ui/SoloLectura";
+import { useCortes } from "@/hooks/use-cortes";
+import { useHistorialMp } from "@/hooks/use-historial-mp";
+import type { LibroMensual } from "@/lib/consumo-excel";
 import { CapturaReal } from "@/components/CapturaReal";
 import { ExcelImportModal } from "@/components/ExcelImportModal";
 import { FiltersBar } from "@/components/FiltersBar";
@@ -66,6 +72,7 @@ import {
 import {
   anioDeMes,
   claveMes,
+  etiquetaMesAnio,
   etiquetaRango,
   indiceDeMes,
   mesesDePeriodo,
@@ -93,23 +100,37 @@ export function MRPApp() {
   const {
     registros: registrosGuardados,
     listo,
-    importarCombinando,
-    agregar,
-    actualizar,
-    actualizarCampo,
-    actualizarProyeccion,
-    actualizarReal,
-    actualizarProbabilidad,
-    actualizarComentario,
-    eliminar,
-    restaurar,
-    vaciar,
-    deshacer,
+    importarCombinando: importarCombinandoActual,
+    agregar: agregarActual,
+    actualizar: actualizarActual,
+    actualizarCampo: actualizarCampoActual,
+    actualizarProyeccion: actualizarProyeccionActual,
+    actualizarReal: actualizarRealActual,
+    actualizarProbabilidad: actualizarProbabilidadActual,
+    actualizarComentario: actualizarComentarioActual,
+    eliminar: eliminarActual,
+    restaurar: restaurarActual,
+    vaciar: vaciarActual,
+    deshacer: deshacerActual,
     puedeDeshacer,
   } = useMrpStore();
 
+  /** Cortes mensuales (fotos de Seguimiento de cada mes) y su historial de Abastecimiento. */
+  const { cortes, guardar: guardarCorte } = useCortes();
+  const { importar: importarHistorial } = useHistorialMp();
+  /** «actual» = los registros vigentes (editables); un mes = el corte de ese mes (solo lectura). */
+  const [corteElegido, setCorteElegido] = useState<MesKey | "actual">("actual");
+  const corte = corteElegido === "actual" ? undefined : cortes[corteElegido];
+  const soloLectura = corte !== undefined;
+
   /** Los campos de mezcla vacíos toman el valor de la regla (lib/mezclas.ts); lo escrito a mano manda. */
-  const registros = useMemo(() => registrosGuardados.map(conMezcla), [registrosGuardados]);
+  const registros = useMemo(
+    () => (corte ? corte.registros : registrosGuardados).map(conMezcla),
+    [corte, registrosGuardados],
+  );
+
+  /** Registros vigentes con la mezcla aplicada: son los que ve Abastecimiento aunque Seguimiento muestre un corte. */
+  const registrosActuales = useMemo(() => registrosGuardados.map(conMezcla), [registrosGuardados]);
 
   const { catalogo, registrarVarios, restaurar: restaurarCatalogo } = useCatalogo();
 
@@ -128,6 +149,7 @@ export function MRPApp() {
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoCumplimiento | "">("");
   const [vista, setVista] = useState<Vista>("seguimiento");
   const [modalImportar, setModalImportar] = useState(false);
+  const [modalCorte, setModalCorte] = useState(false);
   const [modalReporte, setModalReporte] = useState(false);
   const [modalTasas, setModalTasas] = useState(false);
   const [modalFormulario, setModalFormulario] = useState(false);
@@ -227,6 +249,28 @@ export function MRPApp() {
     setAvisoConDeshacer(conDeshacer);
   }, []);
 
+  /** En un corte (solo lectura) ningún cambio llega a los datos: se avisa en vez de guardar. */
+  const protegida = <F extends (...argumentos: never[]) => unknown>(accion: F): F =>
+    ((...argumentos: Parameters<F>) => {
+      if (soloLectura) {
+        mostrarAviso("Este corte es solo lectura. Vuelve a «Datos actuales» para editar.");
+        return undefined;
+      }
+      return accion(...argumentos);
+    }) as F;
+  const importarCombinando = protegida(importarCombinandoActual);
+  const agregar = protegida(agregarActual);
+  const actualizar = protegida(actualizarActual);
+  const actualizarCampo = protegida(actualizarCampoActual);
+  const actualizarProyeccion = protegida(actualizarProyeccionActual);
+  const actualizarReal = protegida(actualizarRealActual);
+  const actualizarProbabilidad = protegida(actualizarProbabilidadActual);
+  const actualizarComentario = protegida(actualizarComentarioActual);
+  const eliminar = protegida(eliminarActual);
+  const restaurar = protegida(restaurarActual);
+  const vaciar = protegida(vaciarActual);
+  const deshacer = protegida(deshacerActual);
+
   useEffect(() => {
     if (!aviso) return;
     const temporizador = window.setTimeout(() => setAviso(null), avisoConDeshacer ? 9000 : 5000);
@@ -260,6 +304,30 @@ export function MRPApp() {
   const elegirPeriodo = (periodo: Periodo) => {
     setPeriodoElegido(periodo);
     setHastaElegido("");
+  };
+
+  /** Cambia entre los datos actuales y un corte mensual; el corte se ve con todo su año. */
+  const elegirCorte = (valor: MesKey | "actual") => {
+    setCorteElegido(valor);
+    setHastaElegido("");
+    if (valor === "actual") {
+      setPeriodoElegido(null);
+      return;
+    }
+    const periodo: Periodo = { desde: `${anioDeMes(valor)}-01`, cantidad: 12 };
+    agregarPeriodos([periodo]);
+    setPeriodoElegido(periodo);
+    if (vista === "real") setVista("seguimiento");
+  };
+
+  /** Guarda el libro mensual: el corte de Seguimiento y el historial de Abastecimiento. No toca lo actual. */
+  const alCargarCorte = (libro: LibroMensual) => {
+    guardarCorte(libro.mes, libro.archivo, libro.registros);
+    importarHistorial(libro.series, libro.mes, libro.archivo);
+    elegirCorte(libro.mes);
+    mostrarAviso(
+      `Corte de ${etiquetaMesAnio(libro.mes)} cargado: ${libro.registros.length} registros y ${libro.series.length} materias primas.`,
+    );
   };
 
   const alImportar = (nuevos: RegistroMRP[]) => {
@@ -408,6 +476,7 @@ export function MRPApp() {
   /* ---------------------------------- Render -------------------------------- */
 
   return (
+    <SoloLecturaContext.Provider value={soloLectura}>
     <div className="flex min-h-screen flex-col">
       {/* ------------------------------ Cabecera ------------------------------ */}
       <header className="sticky top-0 z-30 border-b border-chrome-line bg-chrome-grad text-chrome-ink shadow-pop">
@@ -447,8 +516,10 @@ export function MRPApp() {
                 aria-controls="panel-vista"
                 tabIndex={activa ? 0 : -1}
                 onClick={() => setVista(clave)}
+                disabled={clave === "real" && soloLectura}
+                title={clave === "real" && soloLectura ? "No disponible en un corte (solo lectura)" : undefined}
                 className={cn(
-                  "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-[background-color,color] duration-150",
+                  "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-[background-color,color] duration-150 disabled:cursor-not-allowed disabled:opacity-40",
                   activa
                     ? "bg-white/[0.1] text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12)]"
                     : "text-chrome-ink-2 hover:bg-white/[0.05] hover:text-chrome-ink",
@@ -473,7 +544,9 @@ export function MRPApp() {
             <button
               type="button"
               onClick={abrirNuevo}
-              className={cn(clasesBotonCabecera, "bg-white text-chrome shadow-sm hover:bg-accent-soft")}
+              disabled={soloLectura}
+              title={soloLectura ? "Los cortes son de solo lectura" : undefined}
+              className={cn(clasesBotonCabecera, "bg-white text-chrome shadow-sm hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50")}
             >
               <Plus className="size-4" strokeWidth={2.25} />
               <span className="hidden sm:inline">Nuevo registro</span>
@@ -487,6 +560,13 @@ export function MRPApp() {
                   detalle: "Actualiza filas existentes y anexa las nuevas",
                   icono: <Upload className="size-4" />,
                   alElegir: () => setModalImportar(true),
+                  deshabilitada: soloLectura,
+                },
+                {
+                  etiqueta: "Importar corte mensual",
+                  detalle: "Libro «Consumo MP Asfaltos» de un mes, aparte de lo actual",
+                  icono: <History className="size-4" />,
+                  alElegir: () => setModalCorte(true),
                 },
                 {
                   etiqueta: "Exportar a Excel",
@@ -520,12 +600,14 @@ export function MRPApp() {
                   detalle: "Vuelve a los 85 registros del Excel",
                   icono: <RotateCcw className="size-4" />,
                   alElegir: alRestaurar,
+                  deshabilitada: soloLectura,
                   separador: true,
                 },
                 {
                   etiqueta: "Vaciar tabla",
                   icono: <Trash2 className="size-4" />,
                   alElegir: alVaciar,
+                  deshabilitada: soloLectura,
                   peligro: true,
                 },
               ]}
@@ -538,6 +620,13 @@ export function MRPApp() {
 
       <AvisoSync />
 
+      <ImportarCorteModal
+        abierto={modalCorte}
+        onCerrar={() => setModalCorte(false)}
+        cortesExistentes={Object.keys(cortes)}
+        onCargar={alCargarCorte}
+      />
+
       {/* ------------------------------ Contenido ----------------------------- */}
       <main
         id="panel-vista"
@@ -546,7 +635,7 @@ export function MRPApp() {
         className="mx-auto flex w-full max-w-[112rem] flex-1 flex-col gap-4 px-4 py-5 sm:px-6"
       >
         {vista === "abastecimiento" ? (
-          <AbastecimientoView registros={registros} />
+          <AbastecimientoView registros={registrosActuales} />
         ) : (
           <>
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
@@ -564,6 +653,26 @@ export function MRPApp() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {Object.keys(cortes).length > 0 ? (
+            <label className="flex items-center gap-2.5">
+              <span className="rotulo hidden text-ink-2 sm:inline">Datos</span>
+              <select
+                aria-label="Datos a ver: actuales o un corte mensual"
+                value={soloLectura ? corteElegido : "actual"}
+                onChange={(evento) => elegirCorte(evento.target.value as MesKey | "actual")}
+                className="h-9 cursor-pointer rounded-lg border border-line-strong bg-surface pr-8 pl-2.5 text-sm font-medium text-ink"
+              >
+                <option value="actual">Datos actuales</option>
+                {Object.keys(cortes)
+                  .sort()
+                  .map((mes) => (
+                    <option key={mes} value={mes}>
+                      Corte de {etiquetaMesAnio(mes)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : null}
           <div className="flex items-center gap-2.5">
             <span className="rotulo hidden text-ink-2 sm:inline">Unidad</span>
             <div
@@ -618,6 +727,26 @@ export function MRPApp() {
           <p className="-mt-2 text-xs text-ink-3">
             Vista en cisternas de 8 000 galones: GLN ÷ 8000 · KG ÷ 8000 ÷ 3,785 · TN × 1000 ÷ 8000 ÷ 3,785. Las unidades
             sin conversión (p. ej. UND) se muestran aparte.
+          </p>
+        ) : null}
+
+        {corte ? (
+          <p
+            role="status"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-warn-line bg-warn-soft px-3.5 py-2 text-sm text-ink"
+          >
+            <History className="size-4 shrink-0 text-warn" />
+            <span>
+              Estás viendo el <strong>corte de {etiquetaMesAnio(corte.mes)}</strong> ({corte.archivo}), cargado el{" "}
+              {corte.importadoEn ? new Date(corte.importadoEn).toLocaleDateString("es-PE") : "—"}. Es solo lectura y no afecta a los datos actuales.
+            </span>
+            <button
+              type="button"
+              onClick={() => elegirCorte("actual")}
+              className="ml-auto rounded-md border border-line-strong bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-3"
+            >
+              Volver a datos actuales
+            </button>
           </p>
         ) : null}
 
@@ -679,6 +808,11 @@ export function MRPApp() {
             alActualizarProyeccion={editarProyeccion}
             alActualizarProbabilidad={actualizarProbabilidad}
             alActualizarComentario={actualizarComentario}
+            alActualizarCampo={(id, campo, valor) => {
+              editarCampo(id, campo, valor);
+              if (valor.trim()) registrarVarios({ [campo]: valor });
+            }}
+            opciones={opciones}
           />
         ) : vista === "seguimiento" ? (
           <MRPTable
@@ -820,5 +954,6 @@ export function MRPApp() {
         />
       ) : null}
     </div>
+    </SoloLecturaContext.Provider>
   );
 }

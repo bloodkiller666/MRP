@@ -31,6 +31,7 @@ const COLUMNAS_TEXTO: CampoTextoMRP[] = [
   "emulsion",
   "polimero",
   "aditivo",
+  "otrosAditivos",
   "tipoPen",
   "unidadMedida",
   "departamento",
@@ -53,6 +54,7 @@ const ANCHOS_TEXTO: Record<CampoTextoMRP, number> = {
   emulsion: 48,
   polimero: 32,
   aditivo: 60,
+  otrosAditivos: 54,
   tipoPen: 48,
 };
 

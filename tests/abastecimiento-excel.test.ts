@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { calcularPlan, type MateriaPrima } from "@/lib/abastecimiento";
 import { construirLibroAbastecimiento } from "@/lib/abastecimiento-excel";
+import { gruposPorAnio } from "@/lib/periodos";
 
 const mp: MateriaPrima = {
   id: "mp",
@@ -49,6 +50,21 @@ describe("Excel de abastecimiento", () => {
     const etiquetas = mrp.map((f) => f[0]);
     expect(etiquetas).toContain("EMUL-TEST");
     expect(etiquetas).toEqual(expect.arrayContaining(["Stock inicial", "Consumo", "Compra sugerida", "Stock final con compras"]));
+  });
+
+  it("la tabla del MRP lleva el año (combinado sobre sus meses) y debajo el mes", async () => {
+    const buffer = await construirLibroAbastecimiento([{ mp, plan }], hoy);
+    const libro = XLSX.read(new Uint8Array(buffer), { type: "array" });
+    const hoja = libro.Sheets["MRP por materia prima"];
+    const filas = XLSX.utils.sheet_to_json<unknown[]>(hoja, { header: 1, blankrows: false });
+
+    const iAnio = filas.findIndex((f) => f[0] === "EMUL-TEST");
+    const anios = filas[iAnio].slice(1).filter((v) => v !== undefined && v !== "");
+    const mesesPlan = plan.filas.map((f) => f.mes);
+    expect(anios).toEqual(gruposPorAnio(mesesPlan).map((g) => g.anio));
+    expect(filas[iAnio + 1].slice(0, 4)).toEqual(["Mes", "Ene", "Feb", "Mar"]);
+    expect(filas[iAnio + 1]).toHaveLength(1 + mesesPlan.length);
+    expect((hoja["!merges"] ?? []).length).toBeGreaterThan(0);
   });
 
   it("si no hace falta comprar lo dice", async () => {

@@ -5,13 +5,16 @@ import { useState } from "react";
 
 import type { FilaMes, MateriaPrima, OrigenConsumo, PlanMateria, Proveedor } from "@/lib/abastecimiento";
 import type { AbastecimientoHook } from "@/hooks/use-abastecimiento";
-import { etiquetaMes } from "@/lib/periodos";
+import { anioDeMes, etiquetaMes, gruposPorAnio } from "@/lib/periodos";
 import { cn, parsearNumero } from "@/lib/utils";
+
+import type { SerieHistorial } from "@/lib/consumo-excel";
 
 import { Boton } from "../ui/Boton";
 import { clasesInput } from "../ui/Campos";
 import { FormProveedorModal } from "./FormProveedorModal";
 import { formatearDias, formatearTn } from "./formato";
+import { TablaHistorial } from "./TablaHistorial";
 
 interface PropsGrilla {
   mp: MateriaPrima;
@@ -21,6 +24,12 @@ interface PropsGrilla {
   fuenteDemanda: string;
   alEditarMateria: () => void;
   alEliminarMateria: () => void;
+  /** Historial de años cerrados leído de los libros mensuales (si se importó alguno). */
+  historial?: SerieHistorial;
+  /** Último mes que cubre el historial importado. */
+  historialHasta?: string | null;
+  /** Desglose de la demanda por cliente, que se muestra bajo la tabla. */
+  demandaPorCliente?: React.ReactNode;
 }
 
 const ORIGEN: Record<OrigenConsumo, { etiqueta: string; titulo: string }> = {
@@ -32,17 +41,43 @@ const ORIGEN: Record<OrigenConsumo, { etiqueta: string; titulo: string }> = {
 
 const COL_ETIQUETA = "sticky left-0 z-[5] w-56 min-w-56 max-w-56 bg-surface px-3 text-left shadow-[inset_-1px_0_0_var(--line)]";
 const COL_MES = "w-[5.25rem] min-w-[5.25rem] px-2 text-right";
+const COL_TOTAL = "w-24 min-w-24 px-3 text-right";
 
 /** Parámetros de la materia prima + el MRP mes a mes (stock inicial, consumo, ingresos, stock final). */
-export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMateria, alEliminarMateria }: PropsGrilla) {
-  const [anioCompleto, setAnioCompleto] = useState(false);
+export function GrillaMateria({
+  mp,
+  plan,
+  acciones,
+  fuenteDemanda,
+  alEditarMateria,
+  alEliminarMateria,
+  historial,
+  historialHasta = null,
+  demandaPorCliente,
+}: PropsGrilla) {
+  // «proximos» = desde 2 meses atrás (lo útil para decidir); un año = el historial de ese año, de enero a diciembre.
+  const [vista, setVista] = useState<"proximos" | number>("proximos");
+  const aniosPlan = [...new Set(plan.filas.map((f) => anioDeMes(f.mes)))];
+  // Los años anteriores al plan salen del historial importado (solo consulta).
+  const aniosHistorial = Object.keys(historial?.meses ?? {})
+    .map((m) => anioDeMes(m))
+    .filter((a) => !aniosPlan.includes(a));
+  const anios = [...new Set([...aniosHistorial, ...aniosPlan])].sort((a, b) => a - b);
+  const esAnioHistorico = typeof vista === "number" && !aniosPlan.includes(vista);
 
-  // Por defecto se ve desde 2 meses atrás: el resto del año ya pasó y ocupa lugar.
   const indiceActual = Math.max(
     0,
     plan.filas.findIndex((f) => f.esMesActual),
   );
-  const filas = anioCompleto ? plan.filas : plan.filas.slice(Math.max(0, indiceActual - 2));
+  const filas =
+    vista === "proximos"
+      ? plan.filas.slice(Math.max(0, indiceActual - 2))
+      : plan.filas.filter((f) => anioDeMes(f.mes) === vista);
+  // En la vista de un año se agrega una columna con el total del año.
+  const anioVista = vista === "proximos" || filas.length === 0 ? null : vista;
+  const conTotal = anioVista !== null;
+  const suma = (valor: (fila: FilaMes) => number) => filas.reduce((acumulado, f) => acumulado + valor(f), 0);
+  const total = (texto: string | null) => (conTotal && texto !== null ? texto : undefined);
 
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
@@ -56,24 +91,64 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line px-4 py-2.5">
         <Leyenda />
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-2">
-          <input
-            type="checkbox"
-            checked={anioCompleto}
-            onChange={(evento) => setAnioCompleto(evento.target.checked)}
-            className="size-4 accent-[var(--accent)]"
-          />
-          Ver desde enero
-        </label>
+        <div className="flex items-center gap-2.5">
+          <span className="rotulo text-ink-2">Historial</span>
+          <div role="radiogroup" aria-label="Periodo de la tabla" className="inline-flex rounded-lg border border-line-strong bg-surface p-0.5">
+            {(["proximos", ...anios] as const).map((opcion) => (
+              <button
+                key={opcion}
+                type="button"
+                role="radio"
+                aria-checked={vista === opcion}
+                onClick={() => setVista(opcion)}
+                title={opcion === "proximos" ? "Desde 2 meses atrás hacia adelante" : aniosPlan.includes(opcion) ? `Enero a diciembre de ${opcion}, con el total del año` : `Historial de ${opcion} (solo consulta), de los libros mensuales`}
+                className={cn(
+                  "h-7 rounded-md px-3 text-xs font-semibold transition-colors",
+                  vista === opcion ? "bg-accent text-accent-ink shadow-sm" : "text-ink-2 hover:bg-surface-3 hover:text-ink",
+                )}
+              >
+                {opcion === "proximos" ? "Próximos meses" : opcion}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
+      {esAnioHistorico && historial ? (
+        <TablaHistorial serie={historial} anio={vista} hasta={historialHasta} />
+      ) : (
       <div className="overflow-x-auto border-t border-line">
         <table className="w-full min-w-max border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th scope="col" className={cn(COL_ETIQUETA, "z-10 h-14 border-b border-line-strong bg-surface-2 align-bottom")}>
+              <th
+                scope="col"
+                rowSpan={2}
+                className={cn(COL_ETIQUETA, "z-10 border-b border-line-strong bg-surface-2 align-bottom")}
+              >
                 <span className="rotulo pb-2 text-ink-2">Toneladas (TN)</span>
               </th>
+              {gruposPorAnio(filas.map((f) => f.mes)).map((grupo) => (
+                <th
+                  key={grupo.anio}
+                  scope="colgroup"
+                  colSpan={grupo.cantidad}
+                  className="rotulo h-7 border-b border-l border-line bg-surface-2 px-3 text-left text-ink-2"
+                >
+                  {grupo.anio}
+                </th>
+              ))}
+              {conTotal ? (
+                <th
+                  scope="col"
+                  rowSpan={2}
+                  className={cn(COL_TOTAL, "border-b border-l border-line-strong bg-surface-2 align-bottom")}
+                >
+                  <span className="rotulo block pb-2 text-ink">Total {anioVista}</span>
+                </th>
+              ) : null}
+            </tr>
+            <tr>
               {filas.map((f) => (
                 <th
                   key={f.mes}
@@ -84,12 +159,7 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
                     f.esMesActual && "bg-accent-soft",
                   )}
                 >
-                  <span className="rotulo block text-ink">
-                    {etiquetaMes(f.mes)}
-                    {f.mes.endsWith("-01") || f.mes === filas[0].mes ? (
-                      <span className="ml-1 font-normal text-ink-3">{f.mes.slice(0, 4)}</span>
-                    ) : null}
-                  </span>
+                  <span className="rotulo block text-ink">{etiquetaMes(f.mes)}</span>
                   <span
                     className="mb-2 block text-[11px] font-medium text-ink-3"
                     title={ORIGEN[f.origenConsumo].titulo}
@@ -101,7 +171,13 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
             </tr>
           </thead>
           <tbody>
-            <FilaSimple etiqueta="Stock inicial" filas={filas} valor={(f) => formatearTn(f.stockInicial)} />
+            <FilaSimple
+              etiqueta="Stock inicial"
+              filas={filas}
+              valor={(f) => formatearTn(f.stockInicial)}
+              total={total(formatearTn(filas[0]?.stockInicial ?? 0))}
+              tituloTotal="Stock con el que empezó el año"
+            />
 
             <tr>
               <Etiqueta titulo="Consumo mensual: escriba una cifra para reemplazar al automático; déjela vacía para volver a él">
@@ -121,10 +197,11 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
                   alGuardar={(v) => acciones.fijarConsumo(mp.id, f.mes, v)}
                 />
               ))}
+              {conTotal ? <CeldaTotal texto={formatearTn(suma((f) => f.consumo))} titulo="Consumo del año" /> : null}
             </tr>
 
             <tr>
-              <td colSpan={filas.length + 1} className="border-b border-line bg-surface-2/60 px-3 py-1">
+              <td colSpan={filas.length + 1 + (conTotal ? 1 : 0)} className="border-b border-line bg-surface-2/60 px-3 py-1">
                 <span className="rotulo text-ink-3">Ingresos confirmados, por proveedor</span>
               </td>
             </tr>
@@ -143,6 +220,12 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
                     alGuardar={(v) => acciones.fijarIngreso(mp.id, prov.id, f.mes, v)}
                   />
                 ))}
+                {conTotal ? (
+                  <CeldaTotal
+                    texto={formatearTn(suma((f) => mp.ingresos[prov.id]?.[f.mes] ?? 0))}
+                    titulo={`Ingresos de ${prov.nombre} en el año`}
+                  />
+                ) : null}
               </tr>
             ))}
 
@@ -167,6 +250,9 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
                   )}
                 </td>
               ))}
+              {conTotal ? (
+                <CeldaTotal texto={suma((f) => f.sugerido) > 0 ? formatearTn(suma((f) => f.sugerido)) : "–"} titulo="Compras sugeridas del año" />
+              ) : null}
             </tr>
 
             <tr>
@@ -177,6 +263,9 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
               {filas.map((f) => (
                 <CeldaStock key={f.mes} fila={f} valor={f.stockFinalSinCompras} />
               ))}
+              {conTotal ? (
+                <CeldaTotal texto={formatearTn(filas[filas.length - 1].stockFinalSinCompras)} titulo="Stock al cierre del año" />
+              ) : null}
             </tr>
 
             <tr>
@@ -187,6 +276,9 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
               {filas.map((f) => (
                 <CeldaStock key={f.mes} fila={f} valor={f.stockFinal} />
               ))}
+              {conTotal ? (
+                <CeldaTotal texto={formatearTn(filas[filas.length - 1].stockFinal)} titulo="Stock al cierre del año" />
+              ) : null}
             </tr>
 
             <tr>
@@ -206,18 +298,21 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
                   {formatearDias(f.coberturaDias)}
                 </td>
               ))}
+              {conTotal ? <CeldaTotal texto="–" /> : null}
             </tr>
 
             <FilaSimple
               etiqueta="Stock objetivo al cierre"
               filas={filas}
               valor={(f) => formatearTn(f.stockObjetivo)}
+              total={total("–")}
               tenue
               titulo="El mayor entre el stock mínimo y los días de cobertura de la MP"
             />
           </tbody>
         </table>
       </div>
+      )}
 
       {mp.notas ? (
         <p className="flex gap-2 border-t border-line px-4 py-3 text-xs text-ink-2">
@@ -225,6 +320,8 @@ export function GrillaMateria({ mp, plan, acciones, fuenteDemanda, alEditarMater
           <span className="max-w-4xl">{mp.notas}</span>
         </p>
       ) : null}
+
+      {demandaPorCliente ? <div className="border-t border-line p-4">{demandaPorCliente}</div> : null}
     </section>
   );
 }
@@ -528,12 +625,17 @@ function FilaSimple({
   valor,
   tenue,
   titulo,
+  total,
+  tituloTotal,
 }: {
   etiqueta: string;
   filas: FilaMes[];
   valor: (fila: FilaMes) => string;
   tenue?: boolean;
   titulo?: string;
+  /** Texto de la columna «Total del año» (solo en la vista de un año). */
+  total?: string;
+  tituloTotal?: string;
 }) {
   return (
     <tr>
@@ -546,7 +648,17 @@ function FilaSimple({
           {valor(f)}
         </td>
       ))}
+      {total !== undefined ? <CeldaTotal texto={total} titulo={tituloTotal} /> : null}
     </tr>
+  );
+}
+
+/** Celda de la columna «Total del año». */
+function CeldaTotal({ texto, titulo }: { texto: string; titulo?: string }) {
+  return (
+    <td title={titulo} className={cn(COL_TOTAL, "num border-b border-l border-line bg-surface-2/60 py-2 font-semibold text-ink")}>
+      {texto}
+    </td>
   );
 }
 

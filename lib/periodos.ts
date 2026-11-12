@@ -8,7 +8,7 @@ import type { CantidadesMes, MesKey, Periodo } from "./types";
  * y conservar los anteriores como histórico.
  */
 
-const MESES_ES: ReadonlyArray<{ label: string; nombre: string }> = [
+export const MESES_ES: ReadonlyArray<{ label: string; nombre: string }> = [
   { label: "Ene", nombre: "Enero" },
   { label: "Feb", nombre: "Febrero" },
   { label: "Mar", nombre: "Marzo" },
@@ -62,6 +62,18 @@ export function claveMes(anio: number, indice: number): MesKey {
 
 export function anioDeMes(clave: MesKey): number {
   return Number(clave.slice(0, 4));
+}
+
+/** Agrupa meses consecutivos por año: [«2026», 2 meses], [«2027», 6 meses]… (para cabeceras de tabla). */
+export function gruposPorAnio(meses: MesKey[]): Array<{ anio: number; cantidad: number }> {
+  const grupos: Array<{ anio: number; cantidad: number }> = [];
+  for (const mes of meses) {
+    const anio = anioDeMes(mes);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.anio === anio) ultimo.cantidad += 1;
+    else grupos.push({ anio, cantidad: 1 });
+  }
+  return grupos;
 }
 
 /** Índice 0-11 del mes dentro del año. */

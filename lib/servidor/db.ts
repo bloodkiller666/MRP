@@ -16,6 +16,8 @@ export const CLAVES_PERMITIDAS: ReadonlySet<string> = new Set([
   "mrp:periodos:v1",
   "mrp:tasas:v1",
   "mrp:abastecimiento:v1",
+  "mrp:cortes:v1",
+  "mrp:historial-mp:v1",
   "costos:v1",
 ]);
 

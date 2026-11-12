@@ -22,7 +22,7 @@ export interface Proveedor {
 
 /** Regla que dice qué registros de la demanda consumen esta MP. */
 export interface ReglaDemanda {
-  campo: "emulsion" | "polimero" | "aditivo";
+  campo: "emulsion" | "polimero" | "aditivo" | "otrosAditivos";
   valor: string;
 }
 

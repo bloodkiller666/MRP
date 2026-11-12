@@ -17,6 +17,7 @@ import type { CampoTextoMRP, ColumnaTabla, EstadoCumplimiento, MesKey, RegistroM
 import { cn } from "@/lib/utils";
 
 import { EditableCell } from "./EditableCell";
+import { useSoloLectura } from "./ui/SoloLectura";
 import { BarraCumplimiento, EstadoPastilla } from "./Semaforo";
 
 interface MRPTableProps {
@@ -62,6 +63,7 @@ const ANCHO_TEXTO: Partial<Record<CampoTextoMRP, string>> = {
   emulsion: "max-w-[8rem]",
   polimero: "max-w-[5rem]",
   aditivo: "max-w-[10rem]",
+  otrosAditivos: "max-w-[10rem]",
   tipoPen: "max-w-[8rem]",
 };
 
@@ -150,6 +152,7 @@ export function MRPTable({
   alEliminar,
   alEditarFila,
 }: MRPTableProps) {
+  const soloLectura = useSoloLectura();
   const [orden, setOrden] = useState<Orden | null>(null);
   /** En móvil las tarjetas se muestran de 20 en 20. */
   const [limiteMovil, setLimiteMovil] = useState(20);
@@ -393,7 +396,7 @@ export function MRPTable({
                   </td>
 
                   <td className="sticky right-0 z-[5] border-b border-line bg-surface px-2 py-1.5">
-                    <div className="flex items-center justify-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+                    <div hidden={soloLectura} className="flex items-center justify-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
                       <button
                         type="button"
                         onClick={() => alEditarFila(registro)}
@@ -507,22 +510,26 @@ export function MRPTable({
                   </div>
                   <BarraCumplimiento estado={c.estado} ratio={c.ratio} />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => alEditarFila(registro)}
-                  aria-label="Editar registro"
-                  className="rounded border border-line-strong p-2 text-ink-2"
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => alEliminar(registro)}
-                  aria-label="Eliminar registro"
-                  className="rounded border border-line-strong p-2 text-ink-2"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                {soloLectura ? null : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => alEditarFila(registro)}
+                      aria-label="Editar registro"
+                      className="rounded border border-line-strong p-2 text-ink-2"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => alEliminar(registro)}
+                      aria-label="Eliminar registro"
+                      className="rounded border border-line-strong p-2 text-ink-2"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </>
+                )}
               </div>
             </li>
           ))

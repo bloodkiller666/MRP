@@ -81,6 +81,9 @@ const ALIAS_CAMPOS: Record<string, CampoTextoMRP | "probabilidad" | "comentario"
   tipodeemulsion: "emulsion",
   polimero: "polimero",
   aditivo: "aditivo",
+  otrosaditivos: "otrosAditivos",
+  otroaditivo: "otrosAditivos",
+  otrosaditivo: "otrosAditivos",
 };
 
 /** Decide a qué mes (`AAAA-MM`) corresponde un mes escrito sin año («Oct»). */
@@ -326,6 +329,7 @@ export function mapearMatriz(
       emulsion: "",
       polimero: "",
       aditivo: "",
+      otrosAditivos: "",
       proyecciones: {},
       reales: {},
     };
