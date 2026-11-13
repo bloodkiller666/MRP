@@ -24,6 +24,10 @@ export interface MesHistorial {
   /** Total de ingresos del mes (todos los proveedores). */
   ingresos?: number;
   stockFinal?: number;
+  /** Demanda del mes en cisternas (fila «TOTAL DEMANDA» de la hoja RESUMEN). */
+  demandaCist?: number;
+  /** «Real + Avance» del mes en cisternas. */
+  realCist?: number;
 }
 
 export interface SerieHistorial {
@@ -131,6 +135,10 @@ interface BloqueResumen {
   consumo: Record<MesKey, number>;
   stockFinal: Record<MesKey, number>;
   ingresos: Record<string, Record<MesKey, number>>;
+  /** Tabla en cisternas (encima del bloque): fila «TOTAL DEMANDA». */
+  demandaCist: Record<MesKey, number>;
+  /** Tabla en cisternas: fila «Real + Avance». */
+  realCist: Record<MesKey, number>;
 }
 
 /** Cada bloque empieza en una fila «Stock Inicial» y termina en la siguiente «Stock Final del Mes». */
@@ -142,9 +150,19 @@ function bloquesDeResumen(filas: Matriz, columnas: Record<MesKey, number>): Bloq
     return salida;
   };
 
+  let finAnterior = 0;
   for (let i = 0; i < filas.length; i++) {
     const columnaRotulo = columnaDeRotulo(filas[i], /^stock inicial/i);
     if (columnaRotulo < 0) continue;
+
+    // La tabla en cisternas (TOTAL DEMANDA / Real + Avance) está encima del bloque en TN: se toma la última
+    // de cada una entre el bloque anterior y este.
+    let demandaCist: Record<MesKey, number> = {};
+    let realCist: Record<MesKey, number> = {};
+    for (let k = finAnterior; k < i; k++) {
+      if (columnaDeRotulo(filas[k], /^total demanda/i) >= 0) demandaCist = valores(filas[k]);
+      else if (columnaDeRotulo(filas[k], /^real\s*\+\s*avance/i) >= 0) realCist = valores(filas[k]);
+    }
 
     const unidadTexto = String(filas[i][columnaRotulo + 1] ?? "").trim().toUpperCase();
     const bloque: BloqueResumen = {
@@ -155,6 +173,8 @@ function bloquesDeResumen(filas: Matriz, columnas: Record<MesKey, number>): Bloq
       consumo: {},
       stockFinal: {},
       ingresos: {},
+      demandaCist,
+      realCist,
     };
 
     let enIngresos = false;
@@ -192,6 +212,7 @@ function bloquesDeResumen(filas: Matriz, columnas: Record<MesKey, number>): Bloq
     }
     if (Object.keys(bloque.stockFinal).length > 0 || Object.keys(bloque.consumo).length > 0) bloques.push(bloque);
     i = j;
+    finAnterior = j;
   }
   return bloques;
 }
@@ -265,6 +286,12 @@ function seriesDeResumenes(XLSX: typeof import("xlsx"), libro: WorkBook, mesCort
       for (const [mes, v] of Object.entries(bloque.stockInicial)) ponerMes(mes, "stockInicial", v);
       for (const [mes, v] of Object.entries(bloque.consumo)) ponerMes(mes, "consumo", v);
       for (const [mes, v] of Object.entries(bloque.stockFinal)) ponerMes(mes, "stockFinal", v);
+      // Cisternas: sin conversión de unidad. Lo posterior al corte es proyección y no se guarda.
+      for (const [campo, datos] of [["demandaCist", bloque.demandaCist], ["realCist", bloque.realCist]] as const) {
+        for (const [mes, v] of Object.entries(datos)) {
+          if (mes <= mesCorte) serie.meses[mes] = { ...serie.meses[mes], [campo]: redondear(v) };
+        }
+      }
 
       const totales: Record<MesKey, number> = {};
       for (const [proveedor, porMes] of Object.entries(bloque.ingresos)) {

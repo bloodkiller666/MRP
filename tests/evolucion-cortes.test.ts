@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { calcularPlan, type MateriaPrima, type StockRealMes } from "@/lib/abastecimiento";
 import { compararRegistros, mesesConPronostico } from "@/lib/comparar-cortes";
 import { construirEvolucion } from "@/lib/evolucion-mp";
+import { filasRealPorMateria } from "@/lib/real-por-materia";
 import type { RegistroMRP } from "@/lib/types";
 
 const reg = (cuenta: string, proyecto: string, proy: Record<string, number>): RegistroMRP =>
@@ -66,5 +67,37 @@ describe("evolución de una materia prima", () => {
   it("mide cuánto se equivocó cada corte en los meses cerrados", () => {
     expect(e.resumenes[0]).toMatchObject({ corte: "2026-01", mesesComparados: 2, pronosticado: 10, real: 30 });
     expect(e.resumenes[0].desvio).toBeCloseTo(-2 / 3, 6);
+  });
+});
+
+describe("evolución: cisternas de las hojas RESUMEN", () => {
+  const mp: MateriaPrima = {
+    id: "mp", nombre: "MP", codigosSap: [], regla: null, tasaMp: null,
+    proveedores: [{ id: "p1", nombre: "P", leadTimeDias: 30 }], proveedorSugeridoId: "p1",
+    loteMinTn: 10, loteConfirmado: true, stockMinTn: 0, coberturaDias: 30, costoKg: null,
+    stockInicialTn: 100, ingresos: {}, consumoManual: {}, notas: "",
+  };
+  const base = { mp, consumoSap: {}, mesesConSap: new Set<string>(), consumoPronosticado: { "2026-01": 5 }, hoy: new Date(2026, 1, 10) };
+  const plan = calcularPlan(base);
+  const e = construirEvolucion(plan, plan, {}, 1, { "2026-01": { demandaCist: 2, realCist: 4.5 } });
+  it("agrega demanda y real + avance a cada mes", () => {
+    expect(e.filas[0]).toMatchObject({ mes: "2026-01", demandaCist: 2, realCist: 4.5 });
+    expect(e.filas[1].realCist).toBeUndefined();
+  });
+});
+
+describe("real + avance por materia prima (Seguimiento)", () => {
+  const serie = (meses: Record<string, { demandaCist?: number; realCist?: number }>) => ({
+    mpId: "x", fuente: "", unidadOriginal: "TN" as const, meses, ingresosPorProveedor: {},
+  });
+  const series = {
+    a: serie({ "2026-01": { demandaCist: 2, realCist: 4.5 }, "2026-02": { demandaCist: 2, realCist: 1 }, "2026-03": { demandaCist: 5 } }),
+    b: serie({ "2026-01": { demandaCist: 0, realCist: 0 } }),
+  };
+  const filas = filasRealPorMateria(series, [{ id: "a", nombre: "A" }, { id: "b", nombre: "B" }, { id: "c", nombre: "C" }], ["2026-01", "2026-02", "2026-03"]);
+  it("suma el real y la demanda de los meses con real, y calcula el cumplimiento", () => {
+    expect(filas).toHaveLength(1); // B no tiene cifras y C no tiene serie
+    expect(filas[0]).toMatchObject({ id: "a", totalReal: 5.5, demandaConReal: 4 });
+    expect(filas[0].cumplimiento).toBeCloseTo(1.375);
   });
 });

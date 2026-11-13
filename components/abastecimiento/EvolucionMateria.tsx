@@ -19,6 +19,9 @@ const COL_ETIQUETA = "sticky left-0 z-[5] w-56 min-w-56 max-w-56 bg-surface px-3
 const COL_MES = "w-[5.25rem] min-w-[5.25rem] px-2 text-right";
 
 const pct = new Intl.NumberFormat("es-PE", { style: "percent", maximumFractionDigits: 0, signDisplay: "exceptZero" });
+const cumplimiento = new Intl.NumberFormat("es-PE", { style: "percent", maximumFractionDigits: 0 });
+const cistFmt = new Intl.NumberFormat("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatearCist = (n: number) => cistFmt.format(n);
 
 /**
  * Evolución de una materia prima de enero hasta hoy: stock real contra lo que daba el modelo, y consumo real
@@ -46,9 +49,15 @@ export function EvolucionMateria({ nombre, evolucion }: Props) {
     { nombre: "Plan actual", valores: filas.map((f) => f.consumoPlan), color: "var(--ink-3)", puntos: false },
   ];
 
-  const celda = (valor: number | undefined, extra?: string) => (
+  const hayCisternas = filas.some((f) => f.realCist !== undefined || f.demandaCist !== undefined);
+  const seriesCisternas: SerieGrafico[] = [
+    { nombre: "Demanda", valores: filas.map((f) => f.demandaCist), color: "var(--ink-3)", discontinua: true },
+    { nombre: "Real + avance", valores: filas.map((f) => f.realCist), color: "var(--accent)" },
+  ];
+
+  const celda = (valor: number | undefined, extra?: string, formato: (n: number) => string = formatearTn) => (
     <td className={cn(COL_MES, "num border-b border-line py-1.5", valor === undefined ? "text-ink-3" : "text-ink", extra)}>
-      {valor === undefined ? "·" : formatearTn(valor)}
+      {valor === undefined ? "·" : formato(valor)}
     </td>
   );
   const fila = (etiqueta: string, titulo: string, cuerpo: React.ReactNode, tenue = false) => (
@@ -69,6 +78,9 @@ export function EvolucionMateria({ nombre, evolucion }: Props) {
         <div className="grid gap-3 lg:grid-cols-2">
           <GraficoLineas titulo="Stock al cierre de cada mes (TN)" etiquetas={etiquetas} series={seriesStock} marcaActual={indiceActual} />
           <GraficoLineas titulo="Consumo mensual (TN)" etiquetas={etiquetas} series={seriesConsumo} marcaActual={indiceActual} />
+          {hayCisternas ? (
+            <GraficoLineas titulo="Demanda y real + avance (cisternas)" etiquetas={etiquetas} series={seriesCisternas} marcaActual={indiceActual} unidad="cisternas" />
+          ) : null}
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-line">
@@ -140,6 +152,35 @@ export function EvolucionMateria({ nombre, evolucion }: Props) {
                 filas.map((f) => <Celda key={f.mes}>{celda(f.consumoPlan, f.cerrado ? "text-ink-2" : "text-ink")}</Celda>),
                 true,
               )}
+              {hayCisternas ? (
+                <>
+                  <tr>
+                    <td colSpan={filas.length + 1} className="border-b border-line bg-surface-2/60 px-3 py-1">
+                      <span className="rotulo text-ink-3">Cisternas (hoja RESUMEN)</span>
+                    </td>
+                  </tr>
+                  {fila(
+                    "Demanda (cisternas)",
+                    "Fila «TOTAL DEMANDA» de la hoja RESUMEN de esta materia prima",
+                    filas.map((f) => <Celda key={f.mes}>{celda(f.demandaCist, "text-ink-2", formatearCist)}</Celda>),
+                    true,
+                  )}
+                  {fila(
+                    "Real + avance (cisternas)",
+                    "Fila «Real + Avance» de la hoja RESUMEN: lo despachado del mes, o el avance del mes en curso",
+                    filas.map((f) => <Celda key={f.mes}>{celda(f.realCist, undefined, formatearCist)}</Celda>),
+                  )}
+                  {fila(
+                    "Cumplimiento",
+                    "Real + avance ÷ demanda",
+                    filas.map((f) => {
+                      const c = f.realCist !== undefined && f.demandaCist ? f.realCist / f.demandaCist : undefined;
+                      return <Celda key={f.mes}>{celda(c, c !== undefined && Math.abs(c - 1) > 0.25 ? "text-bad" : undefined, (n) => cumplimiento.format(n))}</Celda>;
+                    }),
+                    true,
+                  )}
+                </>
+              ) : null}
             </tbody>
           </table>
         </div>

@@ -18,7 +18,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "emul-01",
     nombre: "EMUL-01 (ASFIER N480L)",
-    codigosSap: ["400887"],
+    codigosSap: ["400887", "400015"],
     regla: { campo: "emulsion", valor: "EMUL-01" },
     tasaMp: "EMUL-01",
     proveedores: [p("p1", "QUIMIKAO (Importado)", 50)],
@@ -36,7 +36,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "emul-02",
     nombre: "EMUL-02 (INDULIN W5)",
-    codigosSap: ["400882"],
+    codigosSap: ["400882", "400027"],
     regla: { campo: "emulsion", valor: "EMUL-02" },
     tasaMp: "EMUL-02",
     proveedores: [p("p1", "INGEVITY (Importado)", 65)],
@@ -54,7 +54,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "emul-05",
     nombre: "EMUL-05 (INDULIN MQ-3)",
-    codigosSap: ["400415", "400350"],
+    codigosSap: ["400415", "400350", "400885"],
     regla: { campo: "emulsion", valor: "EMUL-05" },
     tasaMp: "EMUL-05",
     proveedores: [p("p1", "INGEVITY (Importado)", 65)],
@@ -72,7 +72,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "emul-08",
     nombre: "EMUL-08 (E4819)",
-    codigosSap: ["400889"],
+    codigosSap: ["400889", "400074"],
     regla: { campo: "emulsion", valor: "EMUL-08" },
     tasaMp: "EMUL-08",
     proveedores: [p("p1", "NOURYON (Importado)", 65)],
@@ -90,7 +90,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "emul-09",
     nombre: "EMUL-09 (E4868 NPF)",
-    codigosSap: ["400888"],
+    codigosSap: ["400888", "400076", "400165", "400274", "400275"],
     regla: { campo: "emulsion", valor: "EMUL-09" },
     tasaMp: "EMUL-09",
     proveedores: [p("p1", "NOURYON (Importado)", 95)],
@@ -150,7 +150,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "sbr",
     nombre: "SBR (Butonal)",
-    codigosSap: ["400066"],
+    codigosSap: ["400066", "400068"],
     regla: { campo: "polimero", valor: "SBR" },
     tasaMp: "SBR",
     proveedores: [p("p1", "RENO (Local)", 40), p("p2", "NITRIFLEX BRASIL (NTL-70)", 60)],
@@ -186,7 +186,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "aceite-epoxidado",
     nombre: "ACEITE EPOXIDADO AE-2",
-    codigosSap: ["400991"],
+    codigosSap: ["400991", "400001"],
     regla: { campo: "aditivo", valor: "ACEITE EPOXIDADO" },
     tasaMp: "ACEITE EPOXIDADO",
     proveedores: [p("p1", "UNIPOX (Argentina)", 50), p("p2", "CONTE (Local)", 15), p("p3", "ROSSEL (Local)", 18)],
@@ -207,7 +207,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "mmk",
     nombre: "MMK (INDULIN MMK / PERAL 417)",
-    codigosSap: ["400806"],
+    codigosSap: ["400806", "400645"],
     regla: null,
     tasaMp: "MMK (PERAL)",
     proveedores: [p("p1", "INGEVITY (Importado)", 65)],
@@ -243,7 +243,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "t1000",
     nombre: "T1000",
-    codigosSap: [],
+    codigosSap: ["400172"],
     regla: { campo: "otrosAditivos", valor: "T1000" },
     tasaMp: "T1000",
     proveedores: [p("p1", "CONTE (Local)", 3)],
@@ -261,7 +261,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "t2000",
     nombre: "T2000",
-    codigosSap: [],
+    codigosSap: ["400173", "401130"],
     regla: { campo: "otrosAditivos", valor: "T2000" },
     tasaMp: "T2000",
     proveedores: [p("p1", "ARIS (Local)", 3)],
@@ -279,7 +279,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "surfax-f50",
     nombre: "SURFAX F50",
-    codigosSap: [],
+    codigosSap: ["400171"],
     regla: { campo: "otrosAditivos", valor: "SURFAX F50" },
     tasaMp: "SURFAX F50",
     proveedores: [p("p1", "POR DEFINIR", 30)],
@@ -315,7 +315,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "emul-06",
     nombre: "EMUL-06",
-    codigosSap: [],
+    codigosSap: ["400886", "400450"],
     regla: { campo: "emulsion", valor: "EMUL-06" },
     tasaMp: "EMUL-06",
     proveedores: [p("p1", "POR DEFINIR", 30)],
@@ -333,7 +333,7 @@ export const MATERIAS_SEMILLA: MateriaPrima[] = [
   {
     id: "p25",
     nombre: "P25",
-    codigosSap: ["400260"],
+    codigosSap: ["400260", "400184"],
     regla: { campo: "otrosAditivos", valor: "P25" },
     tasaMp: "P25",
     proveedores: [p("p1", "INGEVITY (Importado)", 65)],

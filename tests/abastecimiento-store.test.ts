@@ -151,7 +151,8 @@ describe("lo guardado se vuelve a leer bien (depurar)", () => {
     const leido = depurar(JSON.parse(JSON.stringify(store.obtenerInstantanea())))!;
     const mp = leido.materias.find((m) => m.id === "emul-01")!;
     expect(mp.nombre).toBe("EMUL-01 (otro nombre)");
-    expect(mp.codigosSap).toEqual(["400887", "999"]);
+    // se conservan los códigos que agregó el usuario y se suman los de «materiales agrupados» que falten
+    expect(mp.codigosSap).toEqual(["400887", "999", "400015"]);
   });
 
   it("descarta datos dañados sin romperse", () => {

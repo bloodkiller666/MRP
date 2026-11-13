@@ -131,7 +131,10 @@ function depurarMateria(valor: unknown, base: MateriaPrima): MateriaPrima {
   return {
     ...base,
     nombre: typeof v.nombre === "string" && v.nombre.trim() ? v.nombre : base.nombre,
-    codigosSap: Array.isArray(v.codigosSap) ? v.codigosSap.filter((c) => typeof c === "string") : base.codigosSap,
+    // Los códigos guardados se respetan, y se suman los del Excel de materiales agrupados que falten.
+    codigosSap: [
+      ...new Set([...(Array.isArray(v.codigosSap) ? v.codigosSap.filter((c) => typeof c === "string") : []), ...base.codigosSap]),
+    ],
     regla,
     tasaMp: v.tasaMp === null ? null : typeof v.tasaMp === "string" ? v.tasaMp : base.tasaMp,
     notas: typeof v.notas === "string" ? v.notas : base.notas,

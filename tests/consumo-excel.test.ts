@@ -179,3 +179,35 @@ describe("real + avance (hoja Resumen Despachos)", () => {
     expect(r.avisos.some((a) => a.includes("Resumen Despachos") && a.includes("1 no estaban"))).toBe(true);
   });
 });
+
+describe("cisternas de la hoja RESUMEN (TOTAL DEMANDA / Real + Avance)", () => {
+  function libro() {
+    const l = libroDePrueba();
+    const fechas = Array.from({ length: 12 }, (_, i) => fecha(2026, i + 1));
+    const hoja = XLSX.utils.aoa_to_sheet([
+      ["Propietario", "Cliente", "UM", ...fechas],
+      ["Ana", "CLIENTE A", "Cisternas", 1, 2, 3],
+      ["TOTAL DEMANDA", "", "Cisternas", 2, 2, 3],
+      ["Real + Avance", "", "Cisternas", 4.5, 1, 3],
+      ["Cumplimiento", "", "", 2.25, 0.5, 1],
+      [],
+      [null, "TASA (KG/TN)", null, 20],
+      [null, "Stock Inicial", "TN", 9, 8, 7],
+      [null, "Consumo Mensual", "TN", 1, 1, 1],
+      [null, "Ingresos", "TN"],
+      [null, "Stock Final del Mes", "TN", 8, 7, 6],
+    ]);
+    XLSX.utils.book_append_sheet(l, hoja, "RESUMEN EMUL01 (N480L)");
+    return l;
+  }
+  const r = interpretarLibroMensual(XLSX, libro(), "x.xlsx", "2026-02");
+  const emul = r.series.find((s) => s.mpId === "emul-01");
+
+  it("guarda la demanda y el real + avance en cisternas, sin convertir unidades", () => {
+    expect(emul?.meses["2026-01"]).toMatchObject({ demandaCist: 2, realCist: 4.5, consumo: 1 });
+    expect(emul?.meses["2026-02"]).toMatchObject({ demandaCist: 2, realCist: 1 });
+  });
+  it("no guarda lo posterior al mes del corte", () => {
+    expect(emul?.meses["2026-03"]).toBeUndefined();
+  });
+});

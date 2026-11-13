@@ -142,8 +142,12 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
     for (const mes of Object.keys(cortes).sort()) {
       pronosticos[mes] = consumoPronosticado(entrada.mp, extraerDemanda(cortes[mes].registros), tasas);
     }
-    return construirEvolucion(plan, sinReal, pronosticos);
-  }, [materiaElegida, cortes, tasas]);
+    const cisternas: Record<MesKey, { demandaCist?: number; realCist?: number }> = {};
+    for (const [mes, datos] of Object.entries(historial.series[materiaElegida.mp.id]?.meses ?? {})) {
+      if (datos.demandaCist !== undefined || datos.realCist !== undefined) cisternas[mes] = { demandaCist: datos.demandaCist, realCist: datos.realCist };
+    }
+    return construirEvolucion(plan, sinReal, pronosticos, 3, cisternas);
+  }, [materiaElegida, cortes, tasas, historial]);
 
   const alImportar = async (archivo: File) => {
     setImportando(true);

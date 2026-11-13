@@ -25,6 +25,10 @@ export interface FilaEvolucion {
   consumoPlan: number;
   /** Consumo pronosticado por cada corte (clave: mes del corte), si ese corte lo cubría. */
   pronosticos: Record<MesKey, number | undefined>;
+  /** Demanda del mes en cisternas (hoja RESUMEN de la materia prima). */
+  demandaCist?: number;
+  /** «Real + Avance» del mes en cisternas. */
+  realCist?: number;
 }
 
 export interface ResumenCorte {
@@ -47,12 +51,14 @@ export interface Evolucion {
  * @param planSinReal el mismo plan sin stock real
  * @param pronosticosPorCorte consumo pronosticado (TN por mes) con la demanda de cada corte
  * @param mesesAdelante cuántos meses después del actual se incluyen
+ * @param cisternas demanda y «Real + Avance» en cisternas por mes (hojas RESUMEN del historial)
  */
 export function construirEvolucion(
   planActual: PlanMateria,
   planSinReal: PlanMateria,
   pronosticosPorCorte: Record<MesKey, Record<MesKey, number> | null>,
   mesesAdelante = 3,
+  cisternas: Record<MesKey, { demandaCist?: number; realCist?: number }> = {},
 ): Evolucion {
   const indiceActual = Math.max(
     0,
@@ -75,6 +81,8 @@ export function construirEvolucion(
       consumoReal: f.cerrado && esReal ? f.consumo : undefined,
       consumoPlan: f.consumo,
       pronosticos,
+      demandaCist: cisternas[f.mes]?.demandaCist,
+      realCist: cisternas[f.mes]?.realCist,
     };
   });
 

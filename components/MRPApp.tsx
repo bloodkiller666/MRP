@@ -41,6 +41,7 @@ import { MarcaMRP } from "@/components/MarcaMRP";
 import { MenuDatos } from "@/components/MenuDatos";
 import { MRPTable } from "@/components/MRPTable";
 import { PeriodoModal } from "@/components/PeriodoModal";
+import { RealPorMateria } from "@/components/RealPorMateria";
 import { RegistroFormModal } from "@/components/RegistroFormModal";
 import { ReportModal } from "@/components/ReportModal";
 import { TasaConversionesModal } from "@/components/TasaConversionesModal";
@@ -838,6 +839,8 @@ export function MRPApp() {
             opciones={opciones}
           />
         ) : vista === "seguimiento" ? (
+          <>
+          <RealPorMateria meses={meses} />
           <MRPTable
             registros={registrosMostrados}
             totalSinFiltrar={registros.length}
@@ -849,6 +852,7 @@ export function MRPApp() {
             alEliminar={alEliminar}
             alEditarFila={abrirEdicion}
           />
+          </>
         ) : (
           <Dashboard registros={registrosMostrados} meses={meses} alCargarVendedor={cargarDeVendedor} />
         )}

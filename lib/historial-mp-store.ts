@@ -46,6 +46,8 @@ function depurarMeses(valor: unknown): Record<MesKey, MesHistorial> {
     if (esNumero(m.consumo)) limpio.consumo = m.consumo;
     if (esNumero(m.ingresos)) limpio.ingresos = m.ingresos;
     if (esNumero(m.stockFinal)) limpio.stockFinal = m.stockFinal;
+    if (esNumero(m.demandaCist)) limpio.demandaCist = m.demandaCist;
+    if (esNumero(m.realCist)) limpio.realCist = m.realCist;
     salida[mes] = limpio;
   }
   return salida;
