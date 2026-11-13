@@ -1,5 +1,6 @@
 import type { WorkBook, WorkSheet } from "xlsx";
 
+import { conciliarLibro, type ControlConciliacion } from "./conciliacion";
 import { desdeCisternas } from "./conversion";
 import type { MesKey, RegistroMRP } from "./types";
 import { generarId, normalizarTexto } from "./utils";
@@ -49,6 +50,8 @@ export interface LibroMensual {
   series: SerieHistorial[];
   /** Cosas que no se pudieron usar (hojas sin materia prima asociada, filas sin datos…). */
   avisos: string[];
+  /** Controles de conciliación: lo que sumó el Excel contra lo que importó la app (ver lib/conciliacion.ts). */
+  controles: ControlConciliacion[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -98,6 +101,9 @@ function claveDeFecha(v: unknown): MesKey | null {
 }
 
 const redondear = (valor: number) => Math.round(valor * 1e6) / 1e6;
+
+/** Tope razonable de cisternas de una materia prima en un mes; por encima, el dato no está en cisternas. */
+const MAX_CISTERNAS_MES = 1000;
 
 /* -------------------------------------------------------------------------- */
 /*  Historial de Abastecimiento (hojas RESUMEN)                                 */
@@ -159,9 +165,13 @@ function bloquesDeResumen(filas: Matriz, columnas: Record<MesKey, number>): Bloq
     // de cada una entre el bloque anterior y este.
     let demandaCist: Record<MesKey, number> = {};
     let realCist: Record<MesKey, number> = {};
+    // Solo filas rotuladas «Cisternas»: en otras hojas (Surfax, T1000/T2000…) esas filas vienen en kg u otra unidad.
+    const enCisternas = (fila: unknown[], c: number) => normalizarTexto(fila[c + 2]) === "cisternas";
     for (let k = finAnterior; k < i; k++) {
-      if (columnaDeRotulo(filas[k], /^total demanda/i) >= 0) demandaCist = valores(filas[k]);
-      else if (columnaDeRotulo(filas[k], /^real\s*\+\s*avance/i) >= 0) realCist = valores(filas[k]);
+      const cd = columnaDeRotulo(filas[k], /^total demanda/i);
+      const cr = columnaDeRotulo(filas[k], /^real\s*\+\s*avance/i);
+      if (cd >= 0 && enCisternas(filas[k], cd)) demandaCist = valores(filas[k]);
+      else if (cr >= 0 && enCisternas(filas[k], cr)) realCist = valores(filas[k]);
     }
 
     const unidadTexto = String(filas[i][columnaRotulo + 1] ?? "").trim().toUpperCase();
@@ -288,8 +298,18 @@ function seriesDeResumenes(XLSX: typeof import("xlsx"), libro: WorkBook, mesCort
       for (const [mes, v] of Object.entries(bloque.stockFinal)) ponerMes(mes, "stockFinal", v);
       // Cisternas: sin conversión de unidad. Lo posterior al corte es proyección y no se guarda.
       for (const [campo, datos] of [["demandaCist", bloque.demandaCist], ["realCist", bloque.realCist]] as const) {
+        let descartados = 0;
         for (const [mes, v] of Object.entries(datos)) {
-          if (mes <= mesCorte) serie.meses[mes] = { ...serie.meses[mes], [campo]: redondear(v) };
+          if (mes > mesCorte) continue;
+          // Una materia prima no mueve miles de cisternas en un mes: son kg o un error de la hoja, no cisternas.
+          if (v < 0 || v > MAX_CISTERNAS_MES) {
+            descartados += 1;
+            continue;
+          }
+          serie.meses[mes] = { ...serie.meses[mes], [campo]: redondear(v) };
+        }
+        if (descartados > 0) {
+          avisos.push(`«${nombre}»: ${descartados} valor(es) de «${campo === "realCist" ? "Real + Avance" : "TOTAL DEMANDA"}» fuera de rango (negativos o de más de ${MAX_CISTERNAS_MES} cisternas) se ignoraron.`);
         }
       }
 
@@ -559,12 +579,14 @@ export function interpretarLibroMensual(XLSX: typeof import("xlsx"), libro: Work
   const avisos: string[] = [];
   const registros = registrosDeBaseDeDatos(XLSX, libro, mes, avisos);
   registros.push(...aplicarDespachos(XLSX, libro, registros, avisos));
+  const series = seriesDeResumenes(XLSX, libro, mes, avisos);
   return {
     archivo,
     mes,
     registros,
-    series: seriesDeResumenes(XLSX, libro, mes, avisos),
+    series,
     avisos,
+    controles: conciliarLibro(XLSX, libro, mes, registros, series),
   };
 }
 

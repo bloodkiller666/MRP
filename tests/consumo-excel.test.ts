@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { describe, expect, it } from "vitest";
 
+import { conciliarLibro } from "@/lib/conciliacion";
 import { interpretarLibroMensual, materiaDeResumen, mesDelNombreDeArchivo } from "@/lib/consumo-excel";
 import { combinarSeries, depurarHistorial } from "@/lib/historial-mp-store";
 import { depurarCortes } from "@/lib/cortes-store";
@@ -209,5 +210,53 @@ describe("cisternas de la hoja RESUMEN (TOTAL DEMANDA / Real + Avance)", () => {
   });
   it("no guarda lo posterior al mes del corte", () => {
     expect(emul?.meses["2026-03"]).toBeUndefined();
+  });
+});
+
+describe("conciliación con el Excel", () => {
+  const libro = libroDePrueba();
+  const r = interpretarLibroMensual(XLSX, libro, "x.xlsx", "2026-02");
+
+  it("las sumas por mes de «Base de datos» coinciden con lo importado", () => {
+    const demanda = r.controles.filter((c) => c.grupo === "Demanda (Base de datos)");
+    expect(demanda.length).toBeGreaterThan(0);
+    expect(demanda.every((c) => c.estado === "ok")).toBe(true);
+  });
+  it("detecta cuando se pierde una fila al importar", () => {
+    const sinUna = conciliarLibro(XLSX, libro, "2026-02", r.registros.slice(1), r.series);
+    expect(sinUna.some((c) => c.estado === "difiere")).toBe(true);
+  });
+  it("ignora y avisa las filas de cisternas con valores desproporcionados o en otra unidad", () => {
+    const l = libroDePrueba();
+    const fechas = Array.from({ length: 12 }, (_, i) => fecha(2026, i + 1));
+    const hoja = XLSX.utils.aoa_to_sheet([
+      ["Propietario", "Cliente", "UM", ...fechas],
+      ["TOTAL DEMANDA", "", "Cisternas", 2, 2],
+      ["Real + Avance", "", "Cisternas", 75000, 1],
+      [],
+      [null, "TASA (KG/TN)", null, 20],
+      [null, "Stock Inicial", "TN", 9, 8],
+      [null, "Consumo Mensual", "TN", 1, 1],
+      [null, "Ingresos", "TN"],
+      [null, "Stock Final del Mes", "TN", 8, 7],
+    ]);
+    XLSX.utils.book_append_sheet(l, hoja, "RESUMEN EMUL01 (N480L)");
+    const x = interpretarLibroMensual(XLSX, l, "x.xlsx", "2026-02");
+    const e = x.series.find((s) => s.mpId === "emul-01");
+    expect(e?.meses["2026-01"]?.realCist).toBeUndefined();
+    expect(e?.meses["2026-02"]?.realCist).toBe(1);
+    expect(x.avisos.some((a) => a.includes("fuera de rango"))).toBe(true);
+
+    const sinUnidad = XLSX.utils.aoa_to_sheet([
+      ["Propietario", "Cliente", "UM", ...fechas],
+      ["Real + Avance", "", "KG", 5, 6],
+      [null, "Stock Inicial", "TN", 9, 8],
+      [null, "Consumo Mensual", "TN", 1, 1],
+      [null, "Stock Final del Mes", "TN", 8, 7],
+    ]);
+    const l2 = libroDePrueba();
+    XLSX.utils.book_append_sheet(l2, sinUnidad, "RESUMEN EMUL02 (INDULINW5)");
+    const y = interpretarLibroMensual(XLSX, l2, "x.xlsx", "2026-02");
+    expect(y.series.find((s) => s.mpId === "emul-02")?.meses["2026-01"]?.realCist).toBeUndefined();
   });
 });

@@ -3,6 +3,7 @@
 import { Plus } from "lucide-react";
 
 import { ETIQUETAS_ESTADO, REGLA_ESTADO, UMBRAL_AMARILLO, UMBRAL_VERDE } from "@/lib/constants";
+import { convertirACisternas, UNIDAD_CISTERNAS } from "@/lib/conversion";
 import { formatearNumero, formatearPorcentaje, resumirPeriodo, totalesPorUnidad } from "@/lib/mrp-utils";
 import { abarcaVariosAnios, etiquetaMes, etiquetaMesAnio, etiquetaRango, mesesDePeriodo, nombreMes } from "@/lib/periodos";
 import type { EstadoCumplimiento, MesKey, Periodo, RegistroMRP } from "@/lib/types";
@@ -70,7 +71,12 @@ export function SummaryCards({
   estadoFiltro,
   alCambiarEstado,
 }: TarjetasResumenProps) {
-  const resumen = resumirPeriodo(registros, meses);
+  // El global no puede sumar galones con kilos: si la vista trae varias unidades, se compara en cisternas.
+  const variasUnidades = new Set(registros.map((r) => r.unidadMedida.trim() || "s/UM")).size > 1;
+  const resumen = resumirPeriodo(
+    variasUnidades ? convertirACisternas(registros).filter((r) => r.unidadMedida === UNIDAD_CISTERNAS) : registros,
+    meses,
+  );
   const conteos = resumirPeriodo(registrosParaSemaforo, meses).porEstado;
   // Cada unidad de medida se resume por separado: no se suman galones con kilos.
   const porUnidad = totalesPorUnidad(registros, meses).map(({ unidad, registros: cantidad }) => ({
@@ -110,7 +116,7 @@ export function SummaryCards({
         <p className="mt-0.5 text-xs text-ink-3">
           {resumen.ratio === null
             ? "Se calcula cuando haya real + avance cargado."
-            : "Sobre los registros que ya reportan real."}
+            : `Real ÷ demanda de los meses con real, en los registros que ya reportan${variasUnidades ? " (en cisternas, porque hay varias UM)" : ""}.`}
         </p>
       </div>
 

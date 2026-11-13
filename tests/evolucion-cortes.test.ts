@@ -97,7 +97,7 @@ describe("real + avance por materia prima (Seguimiento)", () => {
   const filas = filasRealPorMateria(series, [{ id: "a", nombre: "A" }, { id: "b", nombre: "B" }, { id: "c", nombre: "C" }], ["2026-01", "2026-02", "2026-03"]);
   it("suma el real y la demanda de los meses con real, y calcula el cumplimiento", () => {
     expect(filas).toHaveLength(1); // B no tiene cifras y C no tiene serie
-    expect(filas[0]).toMatchObject({ id: "a", totalReal: 5.5, demandaConReal: 4 });
+    expect(filas[0]).toMatchObject({ id: "a", totalReal: 5.5, demandaConReal: 4, tieneCisternas: true });
     expect(filas[0].cumplimiento).toBeCloseTo(1.375);
   });
 });

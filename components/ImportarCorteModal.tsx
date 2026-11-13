@@ -3,6 +3,7 @@
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { resumirControles, type ControlConciliacion } from "@/lib/conciliacion";
 import { leerLibroMensual, mesDelNombreDeArchivo, type LibroMensual } from "@/lib/consumo-excel";
 import { etiquetaMesAnio, MESES_ES } from "@/lib/periodos";
 import type { MesKey } from "@/lib/types";
@@ -23,6 +24,42 @@ interface Props {
 const OPCIONES_MES: MesKey[] = [2024, 2025, 2026, 2027].flatMap((anio) =>
   MESES_ES.map((_, i) => `${anio}-${String(i + 1).padStart(2, "0")}`),
 );
+
+const fmtControl = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 3 });
+
+/** Controles de conciliación: el Excel contra lo importado. Las diferencias se muestran abiertas. */
+function Conciliacion({ controles }: { controles: ControlConciliacion[] }) {
+  if (controles.length === 0) return null;
+  const { ok, difiere, aviso } = resumirControles(controles);
+  const problemas = controles.filter((c) => c.estado !== "ok");
+  const limpio = difiere === 0 && aviso === 0;
+  const valor = (n: number | undefined) => (n === undefined ? "" : fmtControl.format(n));
+  return (
+    <details open={!limpio} className="text-xs text-ink-3">
+      <summary className={limpio ? "cursor-pointer font-medium text-ok" : "cursor-pointer font-medium text-warn"}>
+        Conciliación con el Excel: {ok} coinciden{difiere > 0 ? ` · ${difiere} difieren` : ""}
+        {aviso > 0 ? ` · ${aviso} aviso(s)` : ""}
+      </summary>
+      {problemas.length > 0 ? (
+        <ul className="mt-1 list-disc pl-5">
+          {problemas.map((c, i) => (
+            <li key={`${c.descripcion}-${i}`}>
+              <span className={c.estado === "difiere" ? "font-medium text-bad" : undefined}>{c.descripcion}</span>
+              {c.esperado !== undefined || c.obtenido !== undefined ? (
+                <span className="num">
+                  {" "}
+                  — Excel {valor(c.esperado) || "–"} · app {valor(c.obtenido) || "–"}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1">Las sumas por mes de demanda y real, y la aritmética de stock, coinciden con el Excel.</p>
+      )}
+    </details>
+  );
+}
 
 /**
  * Importa el libro mensual «Consumo MP Asfaltos» (uno por mes). De él salen dos cosas, sin tocar los
@@ -170,6 +207,7 @@ export function ImportarCorteModal({ abierto, onCerrar, cortesExistentes, onCarg
               <p className="text-warn">Ya hay un corte de este mes: se reemplazará por este.</p>
             ) : null}
             <p className="text-xs text-ink-3">Los registros y parámetros actuales no se modifican.</p>
+            <Conciliacion controles={libro.controles} />
             {libro.avisos.length > 0 ? (
               <details className="text-xs text-ink-3">
                 <summary className="cursor-pointer font-medium text-ink-2">{libro.avisos.length} aviso(s) de la lectura</summary>
