@@ -424,7 +424,7 @@ export function Dashboard({ registros, meses, alCargarVendedor }: DashboardProps
 
         <Panel
           titulo="Cumplimiento por vendedor"
-          descripcion="Real + avance contra la demanda del periodo."
+          descripcion="Real + avance contra la demanda de los meses con real."
           className="xl:col-span-2"
         >
           <ul className="flex flex-col gap-3.5">

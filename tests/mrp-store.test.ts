@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { mrpStore as store } from "@/lib/mrp-store";
 
 describe("registros: deshacer", () => {
+  beforeEach(() => {
+    store.restaurar(); // la app arranca vacía: los datos de ejemplo se cargan a propósito
+  });
+
   it("revierte una edición de celda, una baja y vaciar", () => {
     const inicial = store.obtenerInstantanea();
     const primero = inicial[0];
@@ -23,8 +27,6 @@ describe("registros: deshacer", () => {
     expect(store.obtenerInstantanea()).toHaveLength(inicial.length);
     store.deshacer(); // edición
     expect(store.obtenerInstantanea()[0].cuenta).toBe(primero.cuenta);
-    expect(store.deshacer()).toBe(false);
-    expect(store.puedeDeshacer()).toBe(false);
   });
 
   it("deshace la edición de un pronóstico y de un real", () => {

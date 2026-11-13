@@ -15,8 +15,11 @@ import { generarId, normalizarTexto } from "./utils";
  * suscriben con `useSyncExternalStore` desde `hooks/use-mrp-store.ts`.
  */
 
-/** Estado en memoria. Empieza con los datos mock para que el SSR sea estable. */
-let estado: RegistroMRP[] = REGISTROS_MOCK;
+/** Lista vacía estable (misma referencia en servidor y cliente, para la hidratación). */
+const SIN_REGISTROS: RegistroMRP[] = [];
+
+/** Estado en memoria. Empieza vacío: los datos de ejemplo solo se cargan con «restaurar». */
+let estado: RegistroMRP[] = SIN_REGISTROS;
 
 /** Evita enlazar con la base de datos más de una vez por sesión de navegador. */
 let iniciado = false;
@@ -118,7 +121,7 @@ export const mrpStore = {
 
   /** Instantánea usada en el servidor y durante la hidratación. */
   obtenerInstantaneaServidor(): RegistroMRP[] {
-    return REGISTROS_MOCK;
+    return SIN_REGISTROS;
   },
 
   /** `true` cuando ya se intentó leer la base de datos. */

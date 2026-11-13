@@ -332,9 +332,15 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
 
       <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
         <FileSpreadsheet className="size-3.5" aria-hidden />
-        Consumo real: <span className="font-medium text-ink-2">{estado.mb51.archivo}</span> ·{" "}
-        {estado.mb51.movimientos.toLocaleString("es-PE")} movimientos · {formatearFechaIso(estado.mb51.desde)} al{" "}
-        {formatearFechaIso(estado.mb51.hasta)}
+        {estado.mb51.archivo ? (
+          <>
+            Consumo real: <span className="font-medium text-ink-2">{estado.mb51.archivo}</span> ·{" "}
+            {estado.mb51.movimientos.toLocaleString("es-PE")} movimientos · {formatearFechaIso(estado.mb51.desde)} al{" "}
+            {formatearFechaIso(estado.mb51.hasta)}
+          </>
+        ) : (
+          <>Consumo real: aún no se carga el reporte MB51 de SAP.</>
+        )}
       </p>
 
       {mensaje ? (

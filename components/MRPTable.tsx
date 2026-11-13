@@ -552,7 +552,7 @@ export function MRPTable({
           Doble clic en una celda para editarla · <kbd className="font-sans font-semibold">Enter</kbd> guarda ·{" "}
           <kbd className="font-sans font-semibold">Esc</kbd> cancela
         </span>
-        <span>Cumplimiento = (real + avance) ÷ demanda del periodo</span>
+        <span>Cumplimiento = (real + avance) ÷ demanda de los meses con real</span>
         {hayVariasUM ? (
           <span className="text-ink-2">
             Totales separados por unidad de medida ({porUnidad.map((u) => u.unidad).join(" y ")}): no se suman entre

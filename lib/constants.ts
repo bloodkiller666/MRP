@@ -187,7 +187,7 @@ export const FILTROS_INICIALES: FiltrosMRP = {
 /*  Semáforo de cumplimiento                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** Umbrales del semáforo, sobre (real + avance) ÷ demanda. */
+/** Umbrales del semáforo, sobre (real + avance) ÷ demanda de los meses con real. */
 export const UMBRAL_VERDE = 0.9;
 export const UMBRAL_AMARILLO = 0.7;
 

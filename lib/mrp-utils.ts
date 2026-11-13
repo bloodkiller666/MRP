@@ -92,16 +92,24 @@ export function estadoPorRatio(ratio: number): EstadoCumplimiento {
   return "rojo";
 }
 
-/** Cumplimiento de un registro: (real + avance) ÷ demanda en el periodo. */
+/**
+ * Cumplimiento de un registro: (real + avance) ÷ demanda **de los meses que ya tienen real**. Los meses
+ * futuros (sin real) no entran en el divisor: si no, un cliente al día se vería en rojo por lo que aún no toca.
+ * `demanda` sigue siendo la del periodo completo (columna «Total demanda»).
+ */
 export function cumplimientoRegistro(registro: RegistroMRP, meses: MesKey[]): Cumplimiento {
   const demanda = totalDemanda(registro, meses);
   const real = totalReal(registro, meses);
+  const mesesConReal = meses.filter((mes) => registro.reales[mes] !== undefined);
+  const demandaBase = totalDemanda(registro, mesesConReal);
 
-  if (demanda <= 0) return { demanda, real, ratio: null, estado: "sin-demanda" };
-  if (!tieneReal(registro, meses)) return { demanda, real, ratio: null, estado: "sin-real" };
+  if (demanda <= 0) return { demanda, real, demandaBase, ratio: null, estado: "sin-demanda" };
+  if (mesesConReal.length === 0) return { demanda, real, demandaBase, ratio: null, estado: "sin-real" };
+  // Real en meses donde no había pronóstico: no hay contra qué comparar.
+  if (demandaBase <= 0) return { demanda, real, demandaBase, ratio: null, estado: "sin-demanda" };
 
-  const ratio = real / demanda;
-  return { demanda, real, ratio, estado: estadoPorRatio(ratio) };
+  const ratio = real / demandaBase;
+  return { demanda, real, demandaBase, ratio, estado: estadoPorRatio(ratio) };
 }
 
 /** Agregado de una lista de registros en el periodo. */
@@ -118,7 +126,7 @@ export interface ResumenPeriodo {
 
 /**
  * Totales del periodo. El cumplimiento global compara el real contra la demanda
- * **de los registros que ya reportan real**, para que cargar el despacho de unos
+ * **de los registros que ya reportan real y solo en los meses con real**, para que cargar el despacho de unos
  * pocos clientes no hunda el indicador frente a toda la cartera.
  */
 export function resumirPeriodo(registros: RegistroMRP[], meses: MesKey[]): ResumenPeriodo {
@@ -140,7 +148,7 @@ export function resumirPeriodo(registros: RegistroMRP[], meses: MesKey[]): Resum
     demanda += c.demanda;
     real += c.real;
     if (c.estado !== "sin-real" && c.estado !== "sin-demanda") {
-      demandaConReal += c.demanda;
+      demandaConReal += c.demandaBase;
       realConReal += c.real;
     }
   }

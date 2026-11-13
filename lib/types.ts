@@ -92,7 +92,9 @@ export type EstadoCumplimiento = "verde" | "amarillo" | "rojo" | "sin-real" | "s
 export interface Cumplimiento {
   demanda: number;
   real: number;
-  /** Real ÷ demanda (1 = 100 %). `null` si no se puede calcular. */
+  /** Demanda solo de los meses que ya tienen real: es el divisor del cumplimiento. */
+  demandaBase: number;
+  /** Real ÷ demanda de los meses con real (1 = 100 %). `null` si no se puede calcular. */
   ratio: number | null;
   estado: EstadoCumplimiento;
 }
