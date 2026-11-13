@@ -145,3 +145,37 @@ describe("acumulación del historial mes a mes", () => {
     expect(h?.cortes).toHaveLength(1);
   });
 });
+
+describe("real + avance (hoja Resumen Despachos)", () => {
+  function libroConDespachos() {
+    const libro = libroDePrueba();
+    delete libro.Sheets["Resumen Despachos"];
+    libro.SheetNames = libro.SheetNames.filter((n) => n !== "Resumen Despachos");
+    const cab = ["Cuenta", "Proyecto", "Grupo Linea", "Detalle Producto", "Refineria", "Tipo PEN", "Propietario", " dic-25", fecha(2026, 1), fecha(2026, 2), fecha(2026, 3)];
+    const hoja = XLSX.utils.aoa_to_sheet([
+      [null],
+      cab,
+      ["CLIENTE A", "OBRA 1", "EMULSION ASFALTICA", "EMULTEC CQS-1HP", "PETROPERU", "PEN 60/70", "Ana", 0, 1, 0.5, 0],
+      ["CLIENTE B", "OBRA 1", "ASFALTOS MODIFICADOS", "BETUTEC IC", "REPSOL", "PEN 60/70", "Ana", 0, 0, 0, 2],
+      ["CLIENTE C", "OBRA 9", "EMULSION ASFALTICA", "EMULTEC CSS-1H", "PETROPERU", "PEN 60/70", "Luis", 0, 3, 0, 0],
+      ["Total general", null, null, null, null, null, null, 0, 4, 0.5, 2],
+    ]);
+    XLSX.utils.book_append_sheet(libro, hoja, "Resumen Despachos");
+    return libro;
+  }
+  const r = interpretarLibroMensual(XLSX, libroConDespachos(), "x.xlsx", "2026-01");
+
+  it("carga los meses como real en la unidad del registro (cisternas → GLN / KG)", () => {
+    const a = r.registros.find((x) => x.cuenta === "CLIENTE A");
+    expect(a?.reales).toEqual({ "2026-01": 8000, "2026-02": 4000 });
+    const b = r.registros.find((x) => x.cuenta === "CLIENTE B");
+    expect(b?.reales["2026-03"]).toBeCloseTo(2 * 8000 * 3.785, 0);
+  });
+  it("agrega las filas que no estaban en Base de datos, sin la fila de totales", () => {
+    const c = r.registros.find((x) => x.cuenta === "CLIENTE C");
+    expect(c?.proyecciones).toEqual({});
+    expect(c?.reales["2026-01"]).toBe(24000);
+    expect(r.registros.some((x) => /total/i.test(x.cuenta))).toBe(false);
+    expect(r.avisos.some((a) => a.includes("Resumen Despachos") && a.includes("1 no estaban"))).toBe(true);
+  });
+});

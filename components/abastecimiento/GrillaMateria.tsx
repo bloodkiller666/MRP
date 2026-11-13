@@ -348,7 +348,7 @@ export function GrillaMateria({
         </p>
       ) : null}
 
-      {demandaPorCliente ? <div className="border-t border-line p-4">{demandaPorCliente}</div> : null}
+      {demandaPorCliente ? <div className="flex flex-col gap-4 border-t border-line p-4">{demandaPorCliente}</div> : null}
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import type { WorkBook, WorkSheet } from "xlsx";
 
+import { desdeCisternas } from "./conversion";
 import type { MesKey, RegistroMRP } from "./types";
 import { generarId, normalizarTexto } from "./utils";
 
@@ -404,16 +405,137 @@ function registrosDeBaseDeDatos(XLSX: typeof import("xlsx"), libro: WorkBook, me
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Real + avance (hoja «Resumen Despachos»)                                    */
+/* -------------------------------------------------------------------------- */
+
+/** Mes de una cabecera de columna: fecha de Excel o texto tipo « ene-26». */
+function mesDeCabecera(v: unknown): MesKey | null {
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    const d = new Date(v.getTime() + 12 * 3600 * 1000); // evita saltos de mes por zona horaria
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  const m = /^([a-z]{3,})\W*(\d{2}|\d{4})$/.exec(normalizarTexto(v));
+  if (!m) return null;
+  const i = indiceMesTexto(m[1]);
+  if (i < 0) return null;
+  const anio = m[2].length === 2 ? `20${m[2]}` : m[2];
+  return `${anio}-${String(i + 1).padStart(2, "0")}`;
+}
+
+const claveDespacho = (cuenta: unknown, proyecto: unknown, detalle: unknown) =>
+  [cuenta, proyecto, detalle].map((x) => normalizarTexto(String(x ?? "").replace(/\s+/g, " "))).join("|");
+
+/**
+ * Carga en `reales` lo despachado por cliente. La hoja trae cisternas por mes (los meses cerrados son real;
+ * los posteriores, avance, y se cargan igual). Cada fila se empareja con la de «Base de datos» por cliente,
+ * proyecto y producto; si no existe, se agrega una fila solo con el real. Devuelve las filas agregadas.
+ */
+function aplicarDespachos(XLSX: typeof import("xlsx"), libro: WorkBook, registros: RegistroMRP[], avisos: string[]): RegistroMRP[] {
+  const nombre = libro.SheetNames.find((n) => normalizarTexto(n) === "resumen despachos");
+  if (!nombre) return [];
+  const filas = aMatriz(XLSX, libro.Sheets[nombre]);
+  const filaCab = filas.findIndex(
+    (f, i) => i < 30 && normalizarTexto(f[0]) === "cuenta" && f.some((v) => normalizarTexto(v).startsWith("detalle produc")),
+  );
+  if (filaCab < 0) {
+    if (filas.length > 3) avisos.push("«Resumen Despachos»: no se encontró la fila de encabezados; no se cargó el real.");
+    return [];
+  }
+  const cab = filas[filaCab];
+  const col = (nombreCol: string) => cab.findIndex((v) => normalizarTexto(v).startsWith(nombreCol));
+  const c = {
+    cuenta: col("cuenta"),
+    proyecto: col("proyecto"),
+    detalle: col("detalle produc"),
+    grupo: col("grupo linea"),
+    refineria: col("refineria"),
+    tipoPen: col("tipo pen"),
+    propietario: col("propietario"),
+  };
+  const meses: { col: number; mes: MesKey }[] = [];
+  for (let k = 0; k < cab.length; k++) {
+    const mes = mesDeCabecera(cab[k]);
+    if (mes) meses.push({ col: k, mes });
+    else if (meses.length > 0) break; // fin del bloque de meses
+  }
+  if (meses.length === 0) {
+    avisos.push("«Resumen Despachos»: no se encontraron columnas de meses.");
+    return [];
+  }
+
+  const exactos = new Map<string, RegistroMRP>();
+  const porProducto = new Map<string, RegistroMRP>();
+  for (const r of registros) {
+    const k = claveDespacho(r.cuenta, r.proyecto, r.detalleProducto);
+    if (!exactos.has(k)) exactos.set(k, r);
+    const kp = claveDespacho(r.cuenta, "", r.detalleProducto);
+    if (!porProducto.has(kp)) porProducto.set(kp, r);
+  }
+  const unidadPorDetalle = new Map<string, string>();
+  for (const r of registros) if (!unidadPorDetalle.has(normalizarTexto(r.detalleProducto))) unidadPorDetalle.set(normalizarTexto(r.detalleProducto), r.unidadMedida);
+
+  const texto = (f: unknown[], i: number) => (i < 0 ? "" : String(f[i] ?? "").replace(/\s+/g, " ").trim());
+  const nuevos = new Map<string, RegistroMRP>();
+  let conReal = 0;
+  for (const f of filas.slice(filaCab + 1)) {
+    const cuenta = texto(f, c.cuenta);
+    if (!cuenta || /^total/i.test(cuenta)) continue;
+    const valores = meses.filter(({ col: k }) => esNumero(f[k]) && (f[k] as number) > 0);
+    if (valores.length === 0) continue;
+    const detalle = texto(f, c.detalle);
+    const proyecto = texto(f, c.proyecto);
+    const clave = claveDespacho(cuenta, proyecto, detalle);
+    let destino = exactos.get(clave) ?? nuevos.get(clave);
+    if (!destino) {
+      destino = {
+        id: generarId(),
+        propietario: texto(f, c.propietario),
+        departamento: "",
+        cuenta,
+        proyecto,
+        detalleProducto: detalle,
+        grupoLinea: texto(f, c.grupo),
+        refineria: texto(f, c.refineria),
+        unidadMedida: unidadPorDetalle.get(normalizarTexto(detalle)) ?? "GLN",
+        tipoAplicacion: "",
+        tipoPen: limpiarMezcla(f[c.tipoPen]),
+        emulsion: "",
+        polimero: "",
+        aditivo: "",
+        otrosAditivos: "",
+        proyecciones: {},
+        reales: {},
+      };
+      nuevos.set(clave, destino);
+    }
+    for (const { col: k, mes } of valores) {
+      // cisternas → unidad del registro, como el resto de la hoja de Seguimiento
+      destino.reales[mes] = (destino.reales[mes] ?? 0) + desdeCisternas(destino, f[k] as number);
+    }
+    conReal += 1;
+  }
+  if (conReal > 0) {
+    const sinPar = nuevos.size;
+    avisos.push(
+      `«Resumen Despachos»: real cargado en ${conReal} fila(s)${sinPar ? `; ${sinPar} no estaban en «Base de datos» y se agregaron solo con el real` : ""}.`,
+    );
+  }
+  return [...nuevos.values()];
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Entrada                                                                    */
 /* -------------------------------------------------------------------------- */
 
 /** Interpreta el libro ya leído con SheetJS (`cellDates: true`). */
 export function interpretarLibroMensual(XLSX: typeof import("xlsx"), libro: WorkBook, archivo: string, mes: MesKey): LibroMensual {
   const avisos: string[] = [];
+  const registros = registrosDeBaseDeDatos(XLSX, libro, mes, avisos);
+  registros.push(...aplicarDespachos(XLSX, libro, registros, avisos));
   return {
     archivo,
     mes,
-    registros: registrosDeBaseDeDatos(XLSX, libro, mes, avisos),
+    registros,
     series: seriesDeResumenes(XLSX, libro, mes, avisos),
     avisos,
   };

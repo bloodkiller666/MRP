@@ -8,7 +8,8 @@ import { useCortes } from "@/hooks/use-cortes";
 import { useHistorialMp } from "@/hooks/use-historial-mp";
 import { useStockReal } from "@/hooks/use-stock-real";
 import { useTasas } from "@/hooks/use-tasas";
-import { calcularPlan, MES_INICIO, type CompraSugerida, type MateriaPrima } from "@/lib/abastecimiento";
+import { calcularPlan, MES_INICIO, type CompraSugerida, type EntradaPlan, type MateriaPrima } from "@/lib/abastecimiento";
+import { construirEvolucion } from "@/lib/evolucion-mp";
 import { esCierreDeMes, interpretarStockReal } from "@/lib/stock-real";
 import { exportarAbastecimientoExcel, type PlanConMateria } from "@/lib/abastecimiento-excel";
 import { exportarComprasPdf } from "@/lib/abastecimiento-pdf";
@@ -25,6 +26,7 @@ import { Boton } from "../ui/Boton";
 import { formatearFechaIso, formatearTn } from "./formato";
 import { FormMateriaModal, type ResultadoFormMateria } from "./FormMateriaModal";
 import { DemandaPorCliente } from "./DemandaPorCliente";
+import { EvolucionMateria } from "./EvolucionMateria";
 import { GrillaMateria } from "./GrillaMateria";
 import { ReporteCompras } from "./ReporteCompras";
 
@@ -100,7 +102,7 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
       .map(([codigo, c]) => ({ codigo, nombre: c.nombre }));
   }, [estado.materias, estado.consumosSap]);
 
-  const planes: (PlanConMateria & { fuente: string })[] = useMemo(() => {
+  const planes: (PlanConMateria & { fuente: string; entrada: EntradaPlan })[] = useMemo(() => {
     const mesesConSap = new Set<MesKey>();
     for (const consumo of Object.values(estado.consumosSap)) for (const mes of Object.keys(consumo.meses)) mesesConSap.add(mes);
 
@@ -116,9 +118,11 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
       // Con stock real, el stock de arranque es el de apertura de enero que trae el Excel mensual (si lo hay).
       const aperturaExcel = stockRealMp ? historial.series[mp.id]?.meses[MES_INICIO]?.stockInicial : undefined;
       const mpPlan = aperturaExcel === undefined ? mp : { ...mp, stockInicialTn: aperturaExcel };
+      const entrada: EntradaPlan = { mp: mpPlan, consumoSap, mesesConSap, consumoPronosticado: pronostico, hoy, stockReal: stockRealMp };
       return {
         mp,
-        plan: calcularPlan({ mp: mpPlan, consumoSap, mesesConSap, consumoPronosticado: pronostico, hoy, stockReal: stockRealMp }),
+        entrada,
+        plan: calcularPlan(entrada),
         fuente: describirFuente(mp, tasas),
       };
     });
@@ -128,6 +132,18 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
   const enQuiebre = planes.filter(({ plan }) => plan.mesesEnQuiebre > 0);
   const lotesPorConfirmar = planes.filter(({ mp, plan }) => !mp.loteConfirmado && plan.compras.length > 0);
   const materiaElegida = planes.find(({ mp }) => mp.id === seleccion) ?? planes[0];
+
+  // Evolución de la materia elegida: stock real contra el modelo, y el pronóstico de cada corte contra lo real.
+  const evolucion = useMemo(() => {
+    if (!materiaElegida) return null;
+    const { entrada, plan } = materiaElegida;
+    const sinReal = calcularPlan({ ...entrada, stockReal: undefined });
+    const pronosticos: Record<MesKey, Record<MesKey, number> | null> = {};
+    for (const mes of Object.keys(cortes).sort()) {
+      pronosticos[mes] = consumoPronosticado(entrada.mp, extraerDemanda(cortes[mes].registros), tasas);
+    }
+    return construirEvolucion(plan, sinReal, pronosticos);
+  }, [materiaElegida, cortes, tasas]);
 
   const alImportar = async (archivo: File) => {
     setImportando(true);
@@ -436,7 +452,10 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
               historial={historial.series[materiaElegida.mp.id]}
               historialHasta={historialHasta}
               demandaPorCliente={
-                <DemandaPorCliente mp={materiaElegida.mp} registros={registrosDemanda} meses={mesesDemanda} origen={origenDemanda} />
+                <>
+                  {evolucion ? <EvolucionMateria nombre={materiaElegida.mp.nombre.replace(/ (.*)$/, "")} evolucion={evolucion} /> : null}
+                  <DemandaPorCliente mp={materiaElegida.mp} registros={registrosDemanda} meses={mesesDemanda} origen={origenDemanda} />
+                </>
               }
               alEditarMateria={() => setModalMateria({ modo: "editar", id: materiaElegida.mp.id })}
               alEliminarMateria={() => {

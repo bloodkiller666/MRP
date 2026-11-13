@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   FileText,
   FlaskConical,
+  GitCompare,
   LayoutDashboard,
   Plus,
   RotateCcw,
@@ -26,6 +27,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AbastecimientoView } from "@/components/abastecimiento/AbastecimientoView";
 import { ColumnasSelector } from "@/components/ColumnasSelector";
 import { Dashboard } from "@/components/Dashboard";
+import { Boton } from "@/components/ui/Boton";
+import { CompararCortesModal } from "@/components/CompararCortesModal";
 import { ImportarCorteModal } from "@/components/ImportarCorteModal";
 import { SoloLecturaContext } from "@/components/ui/SoloLectura";
 import { useCortes } from "@/hooks/use-cortes";
@@ -150,6 +153,7 @@ export function MRPApp() {
   const [vista, setVista] = useState<Vista>("seguimiento");
   const [modalImportar, setModalImportar] = useState(false);
   const [modalCorte, setModalCorte] = useState(false);
+  const [modalComparar, setModalComparar] = useState(false);
   const [modalReporte, setModalReporte] = useState(false);
   const [modalTasas, setModalTasas] = useState(false);
   const [modalFormulario, setModalFormulario] = useState(false);
@@ -569,6 +573,13 @@ export function MRPApp() {
                   alElegir: () => setModalCorte(true),
                 },
                 {
+                  etiqueta: "Comparar cortes",
+                  detalle: "Qué cambió en el pronóstico entre dos meses",
+                  icono: <GitCompare className="size-4" />,
+                  alElegir: () => setModalComparar(true),
+                  deshabilitada: Object.keys(cortes).length === 0,
+                },
+                {
                   etiqueta: "Exportar a Excel",
                   detalle: "Vista actual con pronóstico, real y cumplimiento",
                   icono: <Download className="size-4" />,
@@ -619,6 +630,13 @@ export function MRPApp() {
       </header>
 
       <AvisoSync />
+
+      <CompararCortesModal
+        abierto={modalComparar}
+        onCerrar={() => setModalComparar(false)}
+        cortes={cortes}
+        actuales={registrosActuales}
+      />
 
       <ImportarCorteModal
         abierto={modalCorte}
@@ -672,6 +690,11 @@ export function MRPApp() {
                   ))}
               </select>
             </label>
+          ) : null}
+          {Object.keys(cortes).length > 0 ? (
+            <Boton variante="secundario" tamano="sm" icono={<GitCompare className="size-3.5" />} onClick={() => setModalComparar(true)} title="Qué cambió en el pronóstico entre dos cortes">
+              Comparar cortes
+            </Boton>
           ) : null}
           <div className="flex items-center gap-2.5">
             <span className="rotulo hidden text-ink-2 sm:inline">Unidad</span>
