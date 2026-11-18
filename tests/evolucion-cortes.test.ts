@@ -101,3 +101,17 @@ describe("real + avance por materia prima (Seguimiento)", () => {
     expect(filas[0].cumplimiento).toBeCloseTo(1.375);
   });
 });
+
+describe("real + avance por materia prima: cumplimiento solo con meses pareados", () => {
+  const serie = {
+    mpId: "x", fuente: "", unidadOriginal: "TN" as const, ingresosPorProveedor: {},
+    // Ene: real sin demanda (la hoja no la trae); Feb: ambos; Mar: solo demanda.
+    meses: { "2026-01": { realCist: 17 }, "2026-02": { demandaCist: 2, realCist: 1 }, "2026-03": { demandaCist: 5 } },
+  };
+  const [f] = filasRealPorMateria({ a: serie }, [{ id: "a", nombre: "A" }], ["2026-01", "2026-02", "2026-03"]);
+  it("no divide el real de un mes sin demanda entre la demanda de otro", () => {
+    expect(f.totalReal).toBe(18);
+    expect(f.demandaConReal).toBe(2);
+    expect(f.cumplimiento).toBeCloseTo(0.5);
+  });
+});

@@ -27,7 +27,15 @@ export function filasReporteCompras(compras: CompraSugerida[]): string[][] {
     .sort((a, b) => a.fechaPedido.getTime() - b.fechaPedido.getTime())
     .map((c) => [
       c.urgente ? "Pedir ya" : "Programada",
-      c.loteConfirmado ? c.mpNombre : `${c.mpNombre}\n(lote pendiente de cargar)`,
+      [
+        c.mpNombre,
+        ...(c.loteConfirmado ? [] : ["(lote pendiente de cargar)"]),
+        ...(c.baseStock.estado === "provisional"
+          ? ["(sobre stock provisional)"]
+          : c.baseStock.estado === "sin-medicion"
+            ? ["(sin cierre de stock medido)"]
+            : []),
+      ].join("\n"),
       `${c.proveedor}\n${c.leadTimeDias} días de entrega`,
       formatearFechaLarga(c.fechaPedido),
       etiquetaMesAnio(c.mesLlegada),

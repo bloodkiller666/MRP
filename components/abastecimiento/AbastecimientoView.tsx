@@ -13,6 +13,7 @@ import { construirEvolucion } from "@/lib/evolucion-mp";
 import { esCierreDeMes, interpretarStockReal } from "@/lib/stock-real";
 import { exportarAbastecimientoExcel, type PlanConMateria } from "@/lib/abastecimiento-excel";
 import { exportarComprasPdf } from "@/lib/abastecimiento-pdf";
+import { parametrosPendientes } from "@/lib/estado-carga";
 import { consumoPronosticado, extraerDemanda } from "@/lib/abastecimiento-demanda";
 import { parsearMb51 } from "@/lib/mb51";
 import { esAtajoDeshacer } from "@/lib/historial";
@@ -26,6 +27,7 @@ import { Boton } from "../ui/Boton";
 import { formatearFechaIso, formatearTn } from "./formato";
 import { FormMateriaModal, type ResultadoFormMateria } from "./FormMateriaModal";
 import { DemandaPorCliente } from "./DemandaPorCliente";
+import { EstadoCarga } from "./EstadoCarga";
 import { EvolucionMateria } from "./EvolucionMateria";
 import { GrillaMateria } from "./GrillaMateria";
 import { ReporteCompras } from "./ReporteCompras";
@@ -130,6 +132,10 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
 
   const compras = useMemo(() => planes.flatMap(({ plan }) => plan.compras), [planes]);
   const enQuiebre = planes.filter(({ plan }) => plan.mesesEnQuiebre > 0);
+  const pendientes = useMemo(
+    () => parametrosPendientes(estado.materias, new Set(compras.map((c) => c.mpId))),
+    [estado.materias, compras],
+  );
   const lotesPorConfirmar = planes.filter(({ mp, plan }) => !mp.loteConfirmado && plan.compras.length > 0);
   const materiaElegida = planes.find(({ mp }) => mp.id === seleccion) ?? planes[0];
 
@@ -342,6 +348,25 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
           <>Consumo real: aún no se carga el reporte MB51 de SAP.</>
         )}
       </p>
+
+      <EstadoCarga
+        entrada={{
+          anio: hoy.getFullYear(),
+          mesActual: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`,
+          cortes,
+          historial: historial.cortes,
+          stockPorMp: stockReal.porMp,
+          mb51: estado.mb51,
+          mesesConsumoSap: [...new Set(Object.values(estado.consumosSap).flatMap((c) => Object.keys(c.meses)))],
+        }}
+        compras={compras.length}
+        materiasEnQuiebre={enQuiebre.length}
+        pendientes={pendientes}
+        alVerMateria={(id) => {
+          setSeleccion(id);
+          document.getElementById("mrp-materia")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
 
       {mensaje ? (
         <p

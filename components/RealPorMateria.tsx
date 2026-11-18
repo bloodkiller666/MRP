@@ -41,6 +41,7 @@ export function RealPorMateria({ meses }: { meses: MesKey[] }) {
   const fmt = (n: number) => (enTn ? tn.format(n) : cist.format(n));
   const totalReal = filas.reduce((a, f) => a + f.totalReal, 0);
   const totalDemanda = filas.reduce((a, f) => a + f.demandaConReal, 0);
+  const totalPareado = filas.reduce((a, f) => a + f.realPareado, 0);
   const totalConsumo = filas.reduce((a, f) => a + f.totalConsumoTn, 0);
 
   return (
@@ -75,7 +76,7 @@ export function RealPorMateria({ meses }: { meses: MesKey[] }) {
                   <th scope="col" className={TH}>Consumo real (TN)</th>
                 ) : (
                   <>
-                    <th scope="col" className={TH}>Demanda</th>
+                    <th scope="col" className={TH} title="Demanda de los meses que tienen demanda y real a la vez">Demanda</th>
                     <th scope="col" className={TH}>Real + avance</th>
                     <th scope="col" className={TH}>Cumplimiento</th>
                   </>
@@ -131,7 +132,7 @@ export function RealPorMateria({ meses }: { meses: MesKey[] }) {
                     <td className="num px-2 py-1.5 text-right font-semibold text-ink-2">{cist.format(totalDemanda)}</td>
                     <td className="num px-2 py-1.5 text-right font-semibold text-ink">{cist.format(totalReal)}</td>
                     <td className="num px-2 py-1.5 text-right font-semibold text-ink">
-                      {totalDemanda > 1e-9 ? porcentaje.format(totalReal / totalDemanda) : "–"}
+                      {totalDemanda > 1e-9 ? porcentaje.format(totalPareado / totalDemanda) : "–"}
                     </td>
                   </>
                 )}
@@ -142,7 +143,7 @@ export function RealPorMateria({ meses }: { meses: MesKey[] }) {
         <p className="mt-3 text-xs text-ink-3">
           {enTn
             ? "Consumo mensual de la materia prima en toneladas (fila «Consumo Mensual» de cada hoja RESUMEN). No hay demanda en TN en ese libro, por eso no hay cumplimiento; para compararlo con el pronóstico ve a Abastecimiento → Evolución."
-            : "Cada materia prima tiene un solo total (no por cliente). «Demanda» suma solo los meses con real + avance. El mes en curso suele traer el avance igual a la demanda hasta que se actualiza el libro."}
+            : "Cada materia prima tiene un solo total (no por cliente). «Demanda» y «Cumplimiento» comparan solo los meses que tienen demanda y real + avance a la vez. El mes en curso suele traer el avance igual a la demanda hasta que se actualiza el libro."}
         </p>
       </div>
     </details>

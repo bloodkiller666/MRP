@@ -18,11 +18,13 @@ export interface FilaRealMateria {
   id: string;
   nombre: string;
   porMes: Record<MesKey, MesRealMateria>;
-  /** Suma de la demanda de los meses que tienen real + avance (cisternas). */
+  /** Demanda de los meses que tienen a la vez demanda y real + avance (cisternas): base del cumplimiento. */
   demandaConReal: number;
   /** Real + avance del periodo (cisternas). */
   totalReal: number;
-  /** Real + avance ÷ demanda, en los meses con real; `null` si no hay demanda. */
+  /** Real + avance de esos mismos meses con demanda (el divisor y el dividendo comparan lo mismo). */
+  realPareado: number;
+  /** Real + avance ÷ demanda, solo en los meses que tienen ambos; `null` si no hay ninguno. */
   cumplimiento: number | null;
   /** Consumo del periodo (TN). */
   totalConsumoTn: number;
@@ -41,6 +43,7 @@ export function filasRealPorMateria(
     if (!serie) continue;
     const porMes: Record<MesKey, MesRealMateria> = {};
     let demandaConReal = 0;
+    let realPareado = 0;
     let totalReal = 0;
     let totalConsumoTn = 0;
     let tieneCisternas = false;
@@ -53,7 +56,10 @@ export function filasRealPorMateria(
       porMes[mes] = dato;
       if (m.realCist !== undefined) {
         totalReal += m.realCist;
-        demandaConReal += m.demandaCist ?? 0;
+        if ((m.demandaCist ?? 0) > 0) {
+          demandaConReal += m.demandaCist as number;
+          realPareado += m.realCist;
+        }
       }
       if (m.realCist !== undefined ? m.realCist > 0 || (m.demandaCist ?? 0) > 0 : (m.demandaCist ?? 0) > 0) tieneCisternas = true;
       if (m.consumo !== undefined) {
@@ -63,8 +69,8 @@ export function filasRealPorMateria(
     }
     if (!tieneCisternas && !tieneTn) continue;
     filas.push({
-      id, nombre, porMes, demandaConReal, totalReal,
-      cumplimiento: demandaConReal > 1e-9 ? totalReal / demandaConReal : null,
+      id, nombre, porMes, demandaConReal, totalReal, realPareado,
+      cumplimiento: demandaConReal > 1e-9 ? realPareado / demandaConReal : null,
       totalConsumoTn, tieneCisternas, tieneTn,
     });
   }

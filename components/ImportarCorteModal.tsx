@@ -203,6 +203,16 @@ export function ImportarCorteModal({ abierto, onCerrar, cortesExistentes, onCarg
                 </span>
               </li>
             </ul>
+            {libro.sinDespachos ? (
+              <p role="note" className="flex items-start gap-2 rounded-lg border border-line bg-warn-soft px-3 py-2 text-xs text-warn">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  Este corte no trae despachos: la hoja «Resumen Despachos» falta o está vacía. El real de cada cliente quedará con lo que
+                  diga la columna del mes en «Base de datos», que puede ser solo el pronóstico. Pida a su equipo que actualice esa hoja
+                  antes de usar el cumplimiento de este mes.
+                </span>
+              </p>
+            ) : null}
             {reemplaza ? (
               <p className="text-warn">Ya hay un corte de este mes: se reemplazará por este.</p>
             ) : null}

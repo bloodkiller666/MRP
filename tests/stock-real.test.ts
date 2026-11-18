@@ -113,3 +113,47 @@ describe("el plan con stock real", () => {
     expect(plan({}).filas[0]).toMatchObject({ consumo: 999, origenConsumo: "manual" });
   });
 });
+
+import { baseDelStock } from "@/lib/abastecimiento";
+
+describe("firmeza del stock de partida", () => {
+  const cierre = (tn: number, fecha: string) => ({ tn, fecha, fijo: true });
+  it("cierre del mes anterior y nada más nuevo: parte de un cierre firme", () => {
+    const b = baseDelStock({ "2026-10": cierre(10, "2026-10-31") }, "2026-11");
+    expect(b.estado).toBe("cierre");
+    expect(b.cierre).toEqual({ mes: "2026-10", tn: 10 });
+  });
+  it("una medición a la fecha posterior al cierre es provisional", () => {
+    const b = baseDelStock({ "2026-10": cierre(10, "2026-10-31"), "2026-11": { tn: 7, fecha: "2026-11-08", fijo: false } }, "2026-11");
+    expect(b.estado).toBe("provisional");
+    expect(b.provisional).toEqual({ fecha: "2026-11-08", tn: 7 });
+    expect(b.nota).toContain("2026-11-08");
+  });
+  it("sin cierre del mes anterior o sin stock real, el stock es del modelo", () => {
+    expect(baseDelStock({ "2026-08": cierre(5, "2026-08-31") }, "2026-11").estado).toBe("sin-medicion");
+    expect(baseDelStock({}, "2026-11").estado).toBe("sin-medicion");
+  });
+});
+
+describe("medición provisional contra lo que esperaba el modelo", () => {
+  const mp = {
+    id: "mp", nombre: "MP", codigosSap: [], regla: null, tasaMp: null,
+    proveedores: [{ id: "p1", nombre: "P", leadTimeDias: 30 }], proveedorSugeridoId: "p1",
+    loteMinTn: 10, loteConfirmado: true, stockMinTn: 0, coberturaDias: 30, costoKg: null,
+    stockInicialTn: 100, ingresos: {}, consumoManual: {}, notas: "",
+  };
+  const hoy = new Date(2026, 10, 18);
+  const plan = calcularPlan({
+    mp, consumoSap: {}, mesesConSap: new Set<string>(), consumoPronosticado: { "2026-11": 30, "2026-12": 30 }, hoy,
+    stockReal: { "2026-10": { tn: 60, fecha: "2026-10-31", fijo: true }, "2026-11": { tn: 50, fecha: "2026-11-15", fijo: false } },
+  });
+  it("calcula lo esperado a la fecha de la medición con el consumo prorrateado", () => {
+    const p = plan.baseStock.provisional!;
+    // cierre 60 − consumo 30 × 15/30 = 45
+    expect(p.esperadoTn).toBeCloseTo(45);
+    expect(plan.baseStock.nota).toContain("esperaba");
+  });
+  it("lo comparten las compras del plan", () => {
+    for (const c of plan.compras) expect(c.baseStock).toBe(plan.baseStock);
+  });
+});

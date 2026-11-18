@@ -41,6 +41,7 @@ import { MarcaMRP } from "@/components/MarcaMRP";
 import { MenuDatos } from "@/components/MenuDatos";
 import { MRPTable } from "@/components/MRPTable";
 import { PeriodoModal } from "@/components/PeriodoModal";
+import { CumplimientoCortes } from "@/components/CumplimientoCortes";
 import { RealPorMateria } from "@/components/RealPorMateria";
 import { RegistroFormModal } from "@/components/RegistroFormModal";
 import { ReportModal } from "@/components/ReportModal";
@@ -840,6 +841,7 @@ export function MRPApp() {
           />
         ) : vista === "seguimiento" ? (
           <>
+          <CumplimientoCortes />
           <RealPorMateria meses={meses} />
           <MRPTable
             registros={registrosMostrados}

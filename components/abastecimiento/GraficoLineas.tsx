@@ -30,7 +30,8 @@ const compacto = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 1 });
 /** Escala «bonita» para el eje Y: de 0 (o del mínimo negativo) al máximo, en 4 tramos. */
 function escala(min: number, max: number): { min: number; max: number; marcas: number[] } {
   const bajo = Math.min(0, min);
-  const alto = Math.max(max, bajo + 1e-6);
+  // Sin datos (todo en 0) la escala sería de ancho cero: se usa 0–1 para que el eje siga siendo válido.
+  const alto = max - bajo > 1e-9 ? max : bajo + 1;
   const paso0 = (alto - bajo) / 4;
   const mag = 10 ** Math.floor(Math.log10(paso0));
   const paso = [1, 2, 2.5, 5, 10].map((x) => x * mag).find((p) => p >= paso0) ?? paso0;
@@ -78,8 +79,8 @@ export function GraficoLineas({ titulo, etiquetas, series, marcaActual, unidad =
       </figcaption>
       <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} role="img" aria-label={titulo} className="h-auto w-full">
         <title id={id}>{titulo}</title>
-        {marcas.map((m) => (
-          <g key={m}>
+        {marcas.map((m, i) => (
+          <g key={i}>
             <line x1={M.izq} x2={ANCHO - M.der} y1={y(m)} y2={y(m)} stroke="var(--line)" strokeWidth={m === 0 ? 1.5 : 1} />
             <text x={M.izq - 6} y={y(m) + 4} textAnchor="end" fontSize="11" fill="var(--ink-3)">
               {compacto.format(m)}

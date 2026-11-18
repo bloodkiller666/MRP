@@ -40,6 +40,7 @@ export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDesc
   const totalTn = ordenadas.reduce((s, c) => s + c.cantidadTn, 0);
   const totalSoles = ordenadas.reduce((s, c) => s + (c.costo ?? 0), 0);
   const sinCosto = ordenadas.some((c) => c.costo === null);
+  const sobreProvisional = ordenadas.filter((c) => c.baseStock.estado !== "cierre").length;
 
   return (
     <section aria-labelledby="titulo-reporte" className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
@@ -103,6 +104,14 @@ export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDesc
             <Dato rotulo="Para pedir ya" valor={String(urgentes)} peligro={urgentes > 0} />
           </dl>
 
+          {sobreProvisional > 0 ? (
+            <p role="note" className="border-b border-line bg-warn-soft px-4 py-2 text-xs text-warn">
+              {sobreProvisional} de {ordenadas.length} pedido{ordenadas.length === 1 ? "" : "s"} parte{sobreProvisional === 1 ? "" : "n"} de un
+              stock provisional o sin cierre medido (se marcan en la tabla). El plan arranca del último cierre de mes y proyecta el mes en
+              curso: confirme el stock actual con Suministro antes de pedir.
+            </p>
+          ) : null}
+
           {fueraDeHorizonte > 0 ? (
             <p className="border-b border-line bg-surface-2/60 px-4 py-2 text-xs text-ink-3">
               Se ocultan {fueraDeHorizonte} pedido{fueraDeHorizonte === 1 ? "" : "s"} que llegarían después de {horizonte} meses.
@@ -156,6 +165,11 @@ export function ReporteCompras({ compras, hoy, alConfirmar, alVerMateria, alDesc
                           title="Lote mínimo provisional: cargue el real en los parámetros de la materia prima"
                         >
                           Lote pendiente de cargar
+                        </span>
+                      ) : null}
+                      {c.baseStock.estado !== "cierre" ? (
+                        <span className="mt-0.5 block text-xs font-normal text-warn" title={c.baseStock.nota}>
+                          {c.baseStock.estado === "provisional" ? "Sobre stock provisional" : "Sin cierre de stock medido"}
                         </span>
                       ) : null}
                     </Td>

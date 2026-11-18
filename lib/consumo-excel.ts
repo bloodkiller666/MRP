@@ -52,6 +52,8 @@ export interface LibroMensual {
   avisos: string[];
   /** Controles de conciliación: lo que sumó el Excel contra lo que importó la app (ver lib/conciliacion.ts). */
   controles: ControlConciliacion[];
+  /** La hoja «Resumen Despachos» no aportó ningún despacho (falta la hoja, está vacía o sin datos). */
+  sinDespachos: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -586,6 +588,7 @@ export function interpretarLibroMensual(XLSX: typeof import("xlsx"), libro: Work
     registros,
     series,
     avisos,
+    sinDespachos: !registros.some((r) => Object.values(r.reales).some((v) => (v ?? 0) > 0)),
     controles: conciliarLibro(XLSX, libro, mes, registros, series),
   };
 }

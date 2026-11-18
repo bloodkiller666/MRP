@@ -46,6 +46,7 @@ export async function construirLibroAbastecimiento(planes: PlanConMateria[], hoy
       "Stock que debería quedar (TN)",
       "Cobertura que deja (días)",
       "Lote",
+      "Stock de partida",
     ],
     ...compras.map((c) => [
       c.mpNombre,
@@ -62,11 +63,12 @@ export async function construirLibroAbastecimiento(planes: PlanConMateria[], hoy
       redondear(c.stockObjetivo, 2),
       c.coberturaResultante === null ? "" : Math.round(c.coberturaResultante),
       c.loteConfirmado ? "confirmado" : "por confirmar",
+      c.baseStock.estado === "cierre" ? "cierre medido" : c.baseStock.estado === "provisional" ? "provisional: confirmar" : "sin medición: confirmar",
     ]),
   ];
   if (compras.length === 0) filasCompras.push(["No hace falta comprar: el stock cubre el plan."]);
   const hojaCompras = XLSX.utils.aoa_to_sheet(filasCompras);
-  hojaCompras["!cols"] = [28, 28, 22, 14, 12, 8, 10, 14, 18, 12, 24, 22, 20, 14].map((wch) => ({ wch }));
+  hojaCompras["!cols"] = [28, 28, 22, 14, 12, 8, 10, 14, 18, 12, 24, 22, 20, 14, 24].map((wch) => ({ wch }));
   XLSX.utils.book_append_sheet(libro, hojaCompras, "Compras sugeridas");
 
   /* Hoja 2: el MRP de cada MP, un bloque por materia prima. */

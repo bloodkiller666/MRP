@@ -61,7 +61,7 @@ export function EvolucionMateria({ nombre, evolucion }: Props) {
     </td>
   );
   const fila = (etiqueta: string, titulo: string, cuerpo: React.ReactNode, tenue = false) => (
-    <tr>
+    <tr key={etiqueta}>
       <th scope="row" title={titulo} className={cn(COL_ETIQUETA, "border-b border-line py-1.5 font-normal", tenue ? "text-ink-2" : "font-medium text-ink")}>
         <span className="block truncate">{etiqueta}</span>
       </th>

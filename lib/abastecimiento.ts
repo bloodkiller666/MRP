@@ -159,6 +159,64 @@ export interface FilaMes {
   ajusteStock: number;
 }
 
+/**
+ * Qué tan firme es el stock del que parte el plan:
+ * - `cierre`: parte de un cierre de mes medido (el del mes anterior) y no hay una medición más nueva.
+ * - `provisional`: hay una medición a la fecha, posterior al último cierre, que aún puede cambiar. El plan no la
+ *   usa para fijar el stock (parte del cierre y proyecta el mes en curso), así que conviene contrastarla.
+ * - `sin-medicion`: no hay un cierre del mes anterior: el stock es el que arrastra el modelo.
+ */
+export type EstadoBaseStock = "cierre" | "provisional" | "sin-medicion";
+
+export interface BaseStock {
+  estado: EstadoBaseStock;
+  /** Último cierre de mes medido. */
+  cierre?: { mes: MesKey; tn: number };
+  /** Medición a la fecha más reciente, si el mes aún no cierra. */
+  provisional?: { fecha: string; tn: number; /** Lo que el modelo esperaba a esa fecha (orientativo); falta si el mes tiene ingresos programados. */ esperadoTn?: number };
+  /** Texto corto para mostrar junto a la compra. */
+  nota: string;
+}
+
+const formatoTn = (n: number) => (Math.round(n * 100) / 100).toLocaleString("es-PE");
+
+/** Firmeza del stock de partida de un plan, según el stock real cargado y el mes actual. */
+export function baseDelStock(stockReal: Record<MesKey, StockRealMes>, mesActual: MesKey): BaseStock {
+  const entradas = Object.entries(stockReal);
+  const cierres = entradas.filter(([, s]) => s.fijo).sort(([a], [b]) => a.localeCompare(b));
+  const ultimo = cierres.at(-1);
+  const cierre = ultimo ? { mes: ultimo[0], tn: ultimo[1].tn } : undefined;
+  const mesPrevio = (() => {
+    const [a, m] = mesActual.split("-").map(Number);
+    return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, "0")}`;
+  })();
+  const medida = entradas
+    .filter(([, s]) => !s.fijo)
+    .map(([, s]) => s)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+    .at(-1);
+  const provisional = medida && (!ultimo || medida.fecha > ultimo[1].fecha) ? { fecha: medida.fecha, tn: medida.tn } : undefined;
+
+  if (provisional) {
+    return {
+      estado: "provisional",
+      cierre,
+      provisional,
+      nota: `Hay una medición provisional al ${provisional.fecha} (${formatoTn(provisional.tn)} TN)${cierre ? `; el plan parte del cierre de ${cierre.mes} (${formatoTn(cierre.tn)} TN)` : ""}. Confírmela antes de pedir.`,
+    };
+  }
+  if (cierre && cierre.mes >= mesPrevio) {
+    return { estado: "cierre", cierre, nota: `Parte del cierre medido de ${cierre.mes} (${formatoTn(cierre.tn)} TN).` };
+  }
+  return {
+    estado: "sin-medicion",
+    cierre,
+    nota: cierre
+      ? `El último cierre medido es de ${cierre.mes}: el stock actual es una estimación del modelo.`
+      : "Sin stock real cargado: el stock es el que arrastra el modelo.",
+  };
+}
+
 export interface CompraSugerida {
   mpId: string;
   mpNombre: string;
@@ -184,6 +242,8 @@ export interface CompraSugerida {
   loteConfirmado: boolean;
   /** Ingreso que se anotaría al confirmar la compra. */
   proveedorId: string;
+  /** Firmeza del stock de partida: si es provisional o sin medición, conviene confirmarlo antes de pedir. */
+  baseStock: BaseStock;
 }
 
 export interface PlanMateria {
@@ -194,11 +254,14 @@ export interface PlanMateria {
   mesesEnQuiebre: number;
   cantidadTotalTn: number;
   costoTotal: number;
+  /** Firmeza del stock del que parte el plan (cierre medido, provisional o sin medición). */
+  baseStock: BaseStock;
 }
 
 export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado, hoy, stockReal = {} }: EntradaPlan): PlanMateria {
   const meses = mesesDelPlan();
   const mesActual = claveDeFecha(hoy);
+  const baseStock = baseDelStock(stockReal, mesActual);
 
   /* 1. Consumo de cada mes: manual > real SAP (mes cerrado) > pronóstico > promedio reciente. */
   const consumo: number[] = [];
@@ -329,9 +392,27 @@ export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado,
         stockObjetivo: objetivo[i],
         coberturaResultante: mensualSiguiente > 0 ? (conCompras / mensualSiguiente) * 30 : null,
         loteConfirmado: mp.loteConfirmado,
+        baseStock,
       });
     }
   });
+
+  // Medición provisional: se contrasta con lo que el modelo esperaba a esa fecha (consumo del mes prorrateado por
+  // días, solo si el mes no tiene ingresos programados, porque no se sabe cuándo llegarían).
+  if (baseStock.provisional) {
+    const p = baseStock.provisional;
+    const i = meses.indexOf(p.fecha.slice(0, 7));
+    if (i >= 0 && ingresos[i] === 0) {
+      const previo = i > 0 ? filas[i - 1].stockFinalSinCompras : mp.stockInicialTn;
+      const [anio, mesNum, dia] = p.fecha.split("-").map(Number);
+      const diasMes = new Date(anio, mesNum, 0).getDate();
+      p.esperadoTn = redondear(previo - (consumo[i] * Math.min(dia, diasMes)) / diasMes);
+      baseStock.nota = baseStock.nota.replace(
+        " Confírmela antes de pedir.",
+        ` El modelo esperaba ~${formatoTn(p.esperadoTn)} TN a esa fecha (orientativo). Confírmela antes de pedir.`,
+      );
+    }
+  }
 
   const desdeHoy = filas.filter((f) => f.mes >= mesActual);
   const enQuiebre = desdeHoy.filter((f) => f.stockFinalSinCompras < -1e-9);
@@ -343,5 +424,6 @@ export function calcularPlan({ mp, consumoSap, mesesConSap, consumoPronosticado,
     mesesEnQuiebre: enQuiebre.length,
     cantidadTotalTn: compras.reduce((s, c) => s + c.cantidadTn, 0),
     costoTotal: compras.reduce((s, c) => s + (c.costo ?? 0), 0),
+    baseStock,
   };
 }

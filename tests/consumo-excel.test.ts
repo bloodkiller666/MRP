@@ -179,6 +179,14 @@ describe("real + avance (hoja Resumen Despachos)", () => {
     expect(r.registros.some((x) => /total/i.test(x.cuenta))).toBe(false);
     expect(r.avisos.some((a) => a.includes("Resumen Despachos") && a.includes("1 no estaban"))).toBe(true);
   });
+  it("marca el corte sin despachos cuando la hoja es un placeholder o no existe, y no cuando sí trae", () => {
+    expect(r.sinDespachos).toBe(false);
+    expect(interpretarLibroMensual(XLSX, libroDePrueba(), "x.xlsx", "2026-01").sinDespachos).toBe(true);
+    const sinHoja = libroDePrueba();
+    delete sinHoja.Sheets["Resumen Despachos"];
+    sinHoja.SheetNames = sinHoja.SheetNames.filter((n) => n !== "Resumen Despachos");
+    expect(interpretarLibroMensual(XLSX, sinHoja, "x.xlsx", "2026-01").sinDespachos).toBe(true);
+  });
 });
 
 describe("cisternas de la hoja RESUMEN (TOTAL DEMANDA / Real + Avance)", () => {
