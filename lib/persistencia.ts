@@ -35,6 +35,12 @@ const temporizadores = new Map<string, ReturnType<typeof setTimeout>>();
 const enVuelo = new Set<string>();
 const migrados = new Set<string>();
 
+/**
+ * Sube con cada guardado pedido o terminado. Una lectura que empezó antes de un cambio local trae datos viejos:
+ * si este número cambió mientras llegaba la respuesta, se descarta para no pisar lo que se acaba de guardar.
+ */
+let cambiosLocales = 0;
+
 let ultimosDocumentos: Documentos = {};
 let cargado = false;
 let cargaInicial: Promise<void> | null = null;
@@ -119,11 +125,17 @@ function procesarClave(clave: string, documentos: Documentos) {
 
 /** Lee todo de la base y avisa a los stores enlazados. Devuelve `false` si no hay conexión. */
 async function traer(): Promise<boolean> {
+  const marca = cambiosLocales;
+  let documentos: Documentos;
   try {
-    ultimosDocumentos = await pedirDocumentos();
+    documentos = await pedirDocumentos();
   } catch {
     return false;
   }
+  // Hubo un guardado (o hay uno en curso) desde que se pidió la lectura: la respuesta puede ser vieja. La
+  // próxima revisión la repite.
+  if (cambiosLocales !== marca || pendientes.size > 0 || enVuelo.size > 0) return true;
+  ultimosDocumentos = documentos;
   cargado = true;
   for (const clave of enlaces.keys()) procesarClave(clave, ultimosDocumentos);
   if (pendientes.size === 0 && enVuelo.size === 0) fijar("sincronizado", true);
@@ -152,6 +164,7 @@ export function guardar(clave: string, valor: unknown): void {
 }
 
 function programar(clave: string, valor: unknown, espera = ESPERA_GUARDADO_MS) {
+  cambiosLocales += 1;
   pendientes.set(clave, valor);
   fijar("guardando");
   const previo = temporizadores.get(clave);
@@ -175,6 +188,7 @@ async function vaciar(clave: string, alSalir = false): Promise<void> {
       keepalive: alSalir,
     });
 
+    cambiosLocales += 1;
     if (respuesta.ok) {
       versiones.set(clave, ((await respuesta.json()) as { version: number }).version);
     } else if (respuesta.status === 409) {
@@ -242,6 +256,7 @@ export function _reiniciarPersistenciaParaPruebas(): void {
   temporizadores.clear();
   enVuelo.clear();
   migrados.clear();
+  cambiosLocales = 0;
   ultimosDocumentos = {};
   cargado = false;
   cargaInicial = null;

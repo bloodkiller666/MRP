@@ -143,3 +143,44 @@ describe("persistencia en la base de datos", () => {
     expect(srv.puts).toHaveLength(0);
   });
 });
+
+describe("lectura lenta que llega después de un guardado", () => {
+  it("no pisa con datos viejos lo que se acaba de guardar", async () => {
+    const srv = servidorFalso({ "mrp:tasas:v1": { valor: ["A"], version: 3 } });
+    const aplicar = vi.fn();
+    await enlazarDocumento("mrp:tasas:v1", aplicar);
+    expect(aplicar).toHaveBeenCalledTimes(1);
+
+    // La revisión periódica empieza a leer: la respuesta lleva lo que había ANTES del guardado y tarda en llegar.
+    const real = srv.fetchFalso.getMockImplementation()!;
+    let soltar!: () => void;
+    const puerta = new Promise<void>((r) => (soltar = r));
+    let primeraLecturaLenta = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const esLectura = !init?.method || init.method === "GET";
+        if (esLectura && primeraLecturaLenta) {
+          primeraLecturaLenta = false;
+          const foto = new Response(JSON.stringify({ documentos: JSON.parse(JSON.stringify(srv.docs)) }), { status: 200 });
+          await puerta;
+          return foto;
+        }
+        return real(url, init);
+      }),
+    );
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange")); // arranca la revisión (queda esperando la puerta)
+    await vi.advanceTimersByTimeAsync(10);
+    expect(primeraLecturaLenta).toBe(false);
+
+    guardar("mrp:tasas:v1", ["B"]);
+    await vi.advanceTimersByTimeAsync(1000); // el guardado termina: versión 4 en la base
+    expect(srv.docs["mrp:tasas:v1"]).toEqual({ valor: ["B"], version: 4 });
+
+    soltar(); // llega la lectura vieja (versión 3, valor «A»)
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(aplicar).toHaveBeenCalledTimes(1); // nunca se vuelve a aplicar «A»
+  });
+});

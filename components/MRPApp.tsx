@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Plus,
   RotateCcw,
+  Save,
   Scale,
   Table2,
   Trash2,
@@ -45,6 +46,7 @@ import { CumplimientoCortes } from "@/components/CumplimientoCortes";
 import { RealPorMateria } from "@/components/RealPorMateria";
 import { RegistroFormModal } from "@/components/RegistroFormModal";
 import { ReportModal } from "@/components/ReportModal";
+import { RespaldoModal } from "@/components/RespaldoModal";
 import { TasaConversionesModal } from "@/components/TasaConversionesModal";
 import { SelectorPeriodo, SummaryCards } from "@/components/SummaryCards";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -155,6 +157,7 @@ export function MRPApp() {
   const [vista, setVista] = useState<Vista>("seguimiento");
   const [modalImportar, setModalImportar] = useState(false);
   const [modalCorte, setModalCorte] = useState(false);
+  const [modalRespaldo, setModalRespaldo] = useState(false);
   const [modalComparar, setModalComparar] = useState(false);
   const [modalReporte, setModalReporte] = useState(false);
   const [modalTasas, setModalTasas] = useState(false);
@@ -609,12 +612,18 @@ export function MRPApp() {
                   alElegir: () => setModalTasas(true),
                 },
                 {
+                  etiqueta: "Respaldo y restauración",
+                  detalle: "Descarga todo el MRP en un archivo o vuelve a uno anterior",
+                  icono: <Save className="size-4" />,
+                  alElegir: () => setModalRespaldo(true),
+                  separador: true,
+                },
+                {
                   etiqueta: "Restaurar datos originales",
                   detalle: "Vuelve a los 85 registros del Excel",
                   icono: <RotateCcw className="size-4" />,
                   alElegir: alRestaurar,
                   deshabilitada: soloLectura,
-                  separador: true,
                 },
                 {
                   etiqueta: "Vaciar tabla",
@@ -639,6 +648,8 @@ export function MRPApp() {
         cortes={cortes}
         actuales={registrosActuales}
       />
+
+      <RespaldoModal abierto={modalRespaldo} onCerrar={() => setModalRespaldo(false)} />
 
       <ImportarCorteModal
         abierto={modalCorte}
