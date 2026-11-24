@@ -53,6 +53,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useCatalogo } from "@/hooks/use-catalogo";
 import { useColumnas } from "@/hooks/use-columnas";
 import { useMrpStore } from "@/hooks/use-mrp-store";
+import { useOrigen } from "@/hooks/use-origen";
 import { usePeriodos } from "@/hooks/use-periodos";
 import {
   CAMPOS_TEXTO,
@@ -72,6 +73,7 @@ import {
   cumplimientoRegistro,
   filtrarRegistros,
   filtrosActivos,
+  mesesDeReferencia,
   mesesHasta,
   opcionesUnicas,
   tieneDatosEnMeses,
@@ -83,6 +85,7 @@ import {
   etiquetaRango,
   indiceDeMes,
   mesesDePeriodo,
+  ordenarMeses,
   periodosFaltantes,
 } from "@/lib/periodos";
 import { AvisoSync, EstadoSync } from "@/components/ui/EstadoSync";
@@ -95,6 +98,12 @@ type Vista = "seguimiento" | "real" | "analisis" | "abastecimiento";
 
 const clasesBotonCabecera =
   "inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-semibold whitespace-nowrap transition-colors";
+
+/** «24/11/2026» a partir del ISO guardado; vacío si la fecha no es válida. */
+function fechaImportacion(iso: string): string {
+  const fecha = new Date(iso);
+  return Number.isNaN(fecha.getTime()) ? "fecha desconocida" : fecha.toLocaleDateString("es-PE");
+}
 
 /**
  * Raíz de la aplicación MRP (Client Component).
@@ -143,6 +152,7 @@ export function MRPApp() {
 
   const { ocultas, alternar: alternarColumna, mostrarTodas: mostrarTodasColumnas } = useColumnas();
 
+  const { importaciones, registrar: registrarOrigen, limpiar: limpiarOrigen } = useOrigen();
   const { periodos, agregar: agregarPeriodos, quitar: quitarPeriodo, restaurar: restaurarPeriodos } = usePeriodos();
 
   const [filtros, setFiltros] = useState<FiltrosMRP>(FILTROS_INICIALES);
@@ -188,6 +198,8 @@ export function MRPApp() {
   const mesesPeriodo = useMemo(() => mesesDePeriodo(periodoActivo), [periodoActivo]);
   const hasta = mesesPeriodo.includes(hastaElegido) ? hastaElegido : mesesPeriodo[mesesPeriodo.length - 1];
   const meses = useMemo(() => mesesHasta(mesesPeriodo, hasta), [mesesPeriodo, hasta]);
+  // Meses del año anterior con cifras: se muestran en la tabla como referencia (no suman en totales).
+  const mesesReferencia = useMemo(() => mesesDeReferencia(registros, mesesPeriodo), [registros, mesesPeriodo]);
 
   /** Mes siguiente al último periodo: punto de partida sugerido al crear uno nuevo. */
   const mesSugerido = useMemo(() => {
@@ -339,7 +351,7 @@ export function MRPApp() {
     );
   };
 
-  const alImportar = (nuevos: RegistroMRP[]) => {
+  const alImportar = (nuevos: RegistroMRP[], origen: { archivo: string; hoja: string }) => {
     const { anexados, actualizados } = importarCombinando(nuevos);
     // Si se abre un periodo nuevo, el registro cambia en dos stores; «Deshacer» solo revierte los registros.
 
@@ -351,6 +363,16 @@ export function MRPApp() {
     }
     const creados = periodosFaltantes(mesesArchivo, periodos);
     if (creados.length > 0) agregarPeriodos(creados);
+
+    // Queda anotado de qué archivo vienen los datos (nombre, hoja, fecha y meses).
+    const ordenados = ordenarMeses(mesesArchivo);
+    registrarOrigen({
+      archivo: origen.archivo,
+      hoja: origen.hoja,
+      importadoEn: new Date().toISOString(),
+      registros: nuevos.length,
+      ...(ordenados.length > 0 ? { desde: ordenados[0], hasta: ordenados[ordenados.length - 1] } : {}),
+    });
 
     const partes = [
       actualizados > 0 ? `${actualizados} actualizado${actualizados === 1 ? "" : "s"}` : "",
@@ -467,6 +489,7 @@ export function MRPApp() {
       return;
     }
     restaurar();
+    limpiarOrigen();
     restaurarCatalogo();
     restaurarPeriodos();
     setPeriodoElegido(null);
@@ -477,6 +500,7 @@ export function MRPApp() {
   const alVaciar = () => {
     if (!window.confirm("¿Vaciar toda la tabla? Se perderán todos los registros.")) return;
     vaciar();
+    limpiarOrigen();
     mostrarAviso("Tabla vaciada. Puedes importar un Excel o restaurar los datos originales.");
   };
 
@@ -693,7 +717,9 @@ export function MRPApp() {
                 onChange={(evento) => elegirCorte(evento.target.value as MesKey | "actual")}
                 className="h-9 cursor-pointer rounded-lg border border-line-strong bg-surface pr-8 pl-2.5 text-sm font-medium text-ink"
               >
-                <option value="actual">Datos actuales</option>
+                <option value="actual">
+                  {importaciones.length > 0 ? `Datos actuales · ${importaciones[0].archivo}` : "Datos actuales"}
+                </option>
                 {Object.keys(cortes)
                   .sort()
                   .map((mes) => (
@@ -859,6 +885,7 @@ export function MRPApp() {
             totalSinFiltrar={registros.length}
             ocultas={ocultas}
             meses={meses}
+            mesesReferencia={mesesReferencia}
             alActualizarCampo={editarCampo}
             alActualizarProyeccion={editarProyeccion}
             alActualizarReal={editarReal}
@@ -902,7 +929,15 @@ export function MRPApp() {
               Deshacer
               <kbd className="rounded border border-line px-1 font-sans text-[10px] text-ink-3">Ctrl Z</kbd>
             </button>
-            <p>Origen: Excel «Consumo MP Asfaltos», hoja Base de datos</p>
+            <p
+              title={importaciones
+                .map((i) => `${i.archivo}${i.hoja ? ` (hoja ${i.hoja})` : ""} · ${fechaImportacion(i.importadoEn)}`)
+                .join("\n")}
+            >
+              {importaciones.length > 0
+                ? `Origen: Excel «${importaciones[0].archivo}»${importaciones[0].hoja ? `, hoja ${importaciones[0].hoja}` : ""} · importado el ${fechaImportacion(importaciones[0].importadoEn)}`
+                : "Origen: Excel «Consumo MP Asfaltos», hoja Base de datos"}
+            </p>
           </div>
         </div>
       </footer>

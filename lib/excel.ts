@@ -126,6 +126,33 @@ function buscarMes(clave: string, resolver: ResolverMes): MesKey | null {
   return null;
 }
 
+/**
+ * Excel guarda las fechas como un número de serie (1 = 1/1/1900). Cuando la cabecera de un mes es una fecha
+ * («nov-26» con formato de fecha) llega como 46327: se convierte al mes que representa.
+ * Solo se aceptan fechas entre 2000 y 2100 para no confundir otros números con un mes.
+ */
+const SERIE_MIN = 36526; // 1/1/2000
+const SERIE_MAX = 73415; // 31/12/2100
+
+function mesDeSerieExcel(serie: number): MesKey | null {
+  if (!Number.isFinite(serie) || serie < SERIE_MIN || serie > SERIE_MAX) return null;
+  // Excel cuenta desde el 30/12/1899 (con esa base el 1900 «bisiesto» de Excel ya queda absorbido).
+  const fecha = new Date(Date.UTC(1899, 11, 30) + Math.floor(serie) * 86_400_000);
+  return claveMes(fecha.getUTCFullYear(), fecha.getUTCMonth());
+}
+
+/** Texto de una celda de cabecera: una fecha (número de serie o `Date`) se escribe como «Nov 2026». */
+export function textoDeEncabezado(celda: unknown): string {
+  if (celda instanceof Date && !Number.isNaN(celda.getTime())) {
+    return etiquetaMesAnio(claveMes(celda.getFullYear(), celda.getMonth()));
+  }
+  if (typeof celda === "number") {
+    const mes = mesDeSerieExcel(celda);
+    if (mes) return etiquetaMesAnio(mes);
+  }
+  return String(celda ?? "");
+}
+
 /** Asocia un encabezado crudo del archivo a un campo del sistema. */
 export function mapearEncabezado(encabezado: string, resolver: ResolverMes = resolverPorDefecto): CampoDestino | null {
   const clave = normalizarClave(encabezado);
@@ -149,12 +176,15 @@ export function mapearEncabezado(encabezado: string, resolver: ResolverMes = res
 function parsearTexto(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
   const texto = String(valor).replace(/\s+/g, " ").trim();
-  return /^[-–—]+$/.test(texto) ? "" : texto;
+  // Un guion o un error de fórmula de Excel (#N/D, #N/A, #REF!…) no es un dato.
+  return /^[-–—]+$/.test(texto) || /^#(N\/D|N\/A|¡?VALOR!?|¡?REF!?|¡?DIV\/0!?|¿?NOMBRE\??|¡?NUM!?|¡?NULO!?|NULL!?)$/i.test(texto)
+    ? ""
+    : texto;
 }
 
 /** Cantidad de columnas reconocidas en una fila candidata a encabezado. */
 function contarReconocidas(fila: unknown[]): number {
-  return fila.filter((celda) => mapearEncabezado(String(celda ?? ""))).length;
+  return fila.filter((celda) => mapearEncabezado(textoDeEncabezado(celda))).length;
 }
 
 /**
@@ -165,7 +195,7 @@ function contarReconocidas(fila: unknown[]): number {
 function contarCamposDistintos(fila: unknown[]): number {
   const campos = new Set<CampoDestino>();
   for (const celda of fila) {
-    const campo = mapearEncabezado(String(celda ?? ""));
+    const campo = mapearEncabezado(textoDeEncabezado(celda));
     if (campo) campos.add(campo);
   }
   const texto = [...campos].filter((campo) => !campo.startsWith("pron_") && !campo.startsWith("real_")).length;
@@ -263,7 +293,7 @@ export function mapearMatriz(
   if (matriz.length === 0) throw new Error("La hoja está vacía.");
 
   const indiceEncabezado = detectarFilaEncabezado(matriz);
-  const encabezados = (matriz[indiceEncabezado] ?? []).map((celda) => parsearTexto(celda));
+  const encabezados = (matriz[indiceEncabezado] ?? []).map((celda) => parsearTexto(textoDeEncabezado(celda)));
 
   const mapeo: MapeoColumna[] = encabezados.map((encabezadoOriginal, indice) => ({
     encabezadoOriginal: encabezadoOriginal || `Columna ${indice + 1}`,

@@ -76,6 +76,7 @@ const NOMBRES: Record<string, string> = {
   "mrp:cortes:v1": "Cortes mensuales",
   "mrp:historial-mp:v1": "Historial de materias primas",
   "mrp:stock-real:v1": "Stock real",
+  "mrp:origen:v1": "Archivos Excel importados",
   "costos:v1": "Costos",
 };
 

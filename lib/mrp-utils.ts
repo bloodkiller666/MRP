@@ -7,6 +7,7 @@ import type {
   MesKey,
   RegistroMRP,
 } from "./types";
+import { anioDeMes, claveMes, indiceDeMes } from "./periodos";
 import { normalizarTexto } from "./utils";
 
 /** Etiqueta legible de un campo de texto. */
@@ -315,4 +316,40 @@ export function filtrarRegistros(
     const pajar = CAMPOS_TEXTO.map((campo) => registro[campo]).join(" ");
     return normalizarTexto(pajar).includes(termino);
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Meses de referencia (año anterior)                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Meses **anteriores** al periodo que tienen cifras (pronóstico o real) y que la tabla muestra como referencia,
+ * para que se vea cuánto se hizo antes. Se miran los 12 meses previos al inicio del periodo; los que no
+ * tienen datos en ningún registro no ocupan columna. Solo se muestran: no entran en totales ni cumplimiento.
+ */
+export function mesesDeReferencia(registros: RegistroMRP[], mesesPeriodo: MesKey[]): MesKey[] {
+  const inicio = mesesPeriodo[0];
+  if (!inicio) return [];
+  const base = anioDeMes(inicio) * 12 + indiceDeMes(inicio);
+  const candidatos = new Set<MesKey>();
+  for (let i = 12; i >= 1; i--) {
+    const total = base - i;
+    candidatos.add(claveMes(Math.floor(total / 12), total % 12));
+  }
+  const conDatos = new Set<MesKey>();
+  for (const registro of registros) {
+    // Un mes con solo ceros no aporta nada que ver: se muestra únicamente si alguna cifra es distinta de cero.
+    for (const cantidades of [registro.proyecciones, registro.reales]) {
+      for (const [mes, valor] of Object.entries(cantidades)) {
+        if (candidatos.has(mes) && valor) conDatos.add(mes);
+      }
+    }
+  }
+  return [...conDatos].sort();
+}
+
+/** Primer mes (`AAAA-MM`) que se ofrece importar por defecto: 12 meses antes del inicio del periodo. */
+export function inicioDeReferencia(inicioPeriodo: MesKey): MesKey {
+  const total = anioDeMes(inicioPeriodo) * 12 + indiceDeMes(inicioPeriodo) - 12;
+  return claveMes(Math.floor(total / 12), total % 12);
 }

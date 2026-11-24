@@ -29,6 +29,8 @@ interface MRPTableProps {
   ocultas: ColumnaTabla[];
   /** Meses que se muestran (del inicio del periodo hasta el mes elegido). */
   meses: MesKey[];
+  /** Meses anteriores al periodo con cifras: se ven como referencia, sin entrar en totales ni cumplimiento. */
+  mesesReferencia?: MesKey[];
   alActualizarCampo: (id: string, campo: CampoTextoMRP, valor: string) => void;
   alActualizarProyeccion: (id: string, mes: MesKey, valor?: number) => void;
   alActualizarReal: (id: string, mes: MesKey, valor?: number) => void;
@@ -74,6 +76,8 @@ const LISTA_MEZCLA: Partial<Record<CampoTextoMRP, string[]>> = {
   aditivo: ADITIVOS,
   tipoPen: TIPOS_PEN,
 };
+
+const SIN_REFERENCIA: MesKey[] = [];
 
 /** Cliente: columna fija a la izquierda (14 rem en total) para no perder de qué fila son las cifras. */
 const ANCHO_CLIENTE = "w-[14rem] min-w-[14rem] max-w-[14rem]";
@@ -146,6 +150,7 @@ export function MRPTable({
   totalSinFiltrar,
   ocultas,
   meses,
+  mesesReferencia = SIN_REFERENCIA,
   alActualizarCampo,
   alActualizarProyeccion,
   alActualizarReal,
@@ -157,21 +162,28 @@ export function MRPTable({
   /** En móvil las tarjetas se muestran de 20 en 20. */
   const [limiteMovil, setLimiteMovil] = useState(20);
 
-  const variosAnios = abarcaVariosAnios(meses);
+  const variosAnios = abarcaVariosAnios([...mesesReferencia, ...meses]);
   const mesesVisibles = useMemo(
     () =>
-      meses.map((key) => ({
+      [...mesesReferencia, ...meses].map((key) => ({
         key,
+        referencia: mesesReferencia.includes(key),
         label: variosAnios ? `${etiquetaMes(key)} ${anioDeMes(key)}` : etiquetaMes(key),
         nombre: variosAnios ? `${etiquetaMes(key)} ${anioDeMes(key)}` : nombreMes(key),
       })),
-    [meses, variosAnios],
+    [mesesReferencia, meses, variosAnios],
   );
   const camposVisibles = ORDEN_TABLA.filter((campo) => !ocultas.includes(campo));
   const resumen = useMemo(() => resumirPeriodo(registros, meses), [registros, meses]);
   // Nunca se suman unidades distintas: con varias UM el pie trae un total por cada una.
   const porUnidad = useMemo(() => resumenPorUnidad(registros, meses), [registros, meses]);
   const hayVariasUM = porUnidad.length > 1;
+  // Totales por mes de los meses de referencia (solo se muestran en el pie; el cierre usa `meses`).
+  const resumenReferencia = useMemo(() => resumirPeriodo(registros, mesesReferencia), [registros, mesesReferencia]);
+  const referenciaPorUnidad = useMemo(
+    () => new Map(resumenPorUnidad(registros, mesesReferencia).map((u) => [u.unidad, u.resumen])),
+    [registros, mesesReferencia],
+  );
 
   const filas = useMemo(() => {
     const conCumplimiento = registros.map((registro) => ({
@@ -246,13 +258,20 @@ export function MRPTable({
                   key={mes.key}
                   scope="colgroup"
                   colSpan={2}
+                  title={
+                    mes.referencia
+                      ? "Mes anterior al periodo, solo de referencia: no cuenta en los totales ni en el cumplimiento"
+                      : undefined
+                  }
                   className={cn(
                     clasesTh,
                     "top-0 h-8 border-l border-line-strong py-0 text-center text-ink",
+                    mes.referencia && "bg-surface-3 text-ink-2",
                   )}
                 >
                   <span className="rotulo">
                     {mes.nombre}
+                    {mes.referencia ? <span className="ml-1 font-normal text-ink-3">· ref.</span> : null}
                   </span>
                 </th>
               ))}
@@ -272,7 +291,7 @@ export function MRPTable({
             </tr>
             <tr>
               {mesesVisibles.map((mes) => (
-                <ThMes key={mes.key} />
+                <ThMes key={mes.key} referencia={mes.referencia} />
               ))}
               <CabeceraSimple
                 etiqueta="Total demanda"
@@ -368,6 +387,7 @@ export function MRPTable({
                   {mesesVisibles.map((mes) => (
                     <FragmentoMes
                       key={mes.key}
+                      referencia={mes.referencia}
                       pron={registro.proyecciones[mes.key]}
                       real={registro.reales[mes.key]}
                       alGuardarPron={(valor) => alActualizarProyeccion(registro.id, mes.key, valor)}
@@ -433,6 +453,8 @@ export function MRPTable({
                   }
                   resumen={r}
                   meses={meses}
+                  mesesReferencia={mesesReferencia}
+                  resumenReferencia={hayVariasUM ? (referenciaPorUnidad.get(unidad) ?? null) : resumenReferencia}
                   columnasTexto={Math.max(camposVisibles.length, 1)}
                   // Cada fila de totales se ancla sobre la anterior al hacer scroll vertical.
                   inferior={`${(lista.length - 1 - indice) * ALTO_PIE}rem`}
@@ -588,13 +610,13 @@ function bordeEstado(estado: EstadoCumplimiento): string {
 }
 
 /** Subcabeceras «Pron.» y «Real» de un mes (segunda fila de la cabecera). */
-function ThMes() {
+function ThMes({ referencia }: { referencia?: boolean }) {
   return (
     <>
-      <th scope="col" className={cn(clasesTh, "top-8 border-l border-line-strong pb-2 text-right")}>
+      <th scope="col" className={cn(clasesTh, "top-8 border-l border-line-strong pb-2 text-right", referencia && "bg-surface-3")}>
         <span className="rotulo text-ink-2">Pron.</span>
       </th>
-      <th scope="col" className={cn(clasesTh, "top-8 pb-2 text-right")}>
+      <th scope="col" className={cn(clasesTh, "top-8 pb-2 text-right", referencia && "bg-surface-3")}>
         <span className="rotulo text-accent">Real</span>
       </th>
     </>
@@ -648,11 +670,14 @@ function CabeceraSimple({
 
 /** Dos celdas editables (pronóstico y real) de un mes. */
 function FragmentoMes({
+  referencia,
   pron,
   real,
   alGuardarPron,
   alGuardarReal,
 }: {
+  /** Mes de referencia (año anterior): se distingue con un fondo apagado. */
+  referencia?: boolean;
   pron: number | undefined;
   real: number | undefined;
   alGuardarPron: (valor?: number) => void;
@@ -664,7 +689,7 @@ function FragmentoMes({
         valor={pron}
         tipo="numero"
         alineacion="derecha"
-        className="border-l border-line-strong"
+        className={cn("border-l border-line-strong", referencia && "bg-surface-2/70")}
         alGuardar={(valor) => alGuardarPron(typeof valor === "number" ? valor : undefined)}
       />
       <EditableCell
@@ -672,7 +697,7 @@ function FragmentoMes({
         tipo="numero"
         alineacion="derecha"
         titulo="Doble clic para cargar el despacho real / avance"
-        className="bg-accent-soft/35 text-accent"
+        className={cn("bg-accent-soft/35 text-accent", referencia && "bg-surface-2/70")}
         alGuardar={(valor) => alGuardarReal(typeof valor === "number" ? valor : undefined)}
       />
     </>
@@ -685,6 +710,8 @@ function FilaPie({
   detalle,
   resumen,
   meses,
+  mesesReferencia,
+  resumenReferencia,
   columnasTexto,
   inferior,
 }: {
@@ -692,6 +719,8 @@ function FilaPie({
   detalle: string;
   resumen: ResumenPeriodo;
   meses: MesKey[];
+  mesesReferencia: MesKey[];
+  resumenReferencia: ResumenPeriodo | null;
   columnasTexto: number;
   inferior: string;
 }) {
@@ -706,6 +735,15 @@ function FilaPie({
         <span className="rotulo">{etiqueta}</span>
         <span className="ml-2 text-xs font-normal text-chrome-ink-2">{detalle}</span>
       </td>
+      {mesesReferencia.map((mes) => (
+        <TotalesMes
+          key={mes}
+          demanda={resumenReferencia?.porMes[mes]?.demanda ?? 0}
+          real={resumenReferencia?.porMes[mes]?.real ?? 0}
+          conReal={resumenReferencia?.porMes[mes]?.conReal ?? false}
+          inferior={inferior}
+        />
+      ))}
       {meses.map((mes) => (
         <TotalesMes
           key={mes}

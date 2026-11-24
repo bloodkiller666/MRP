@@ -5,7 +5,7 @@ import { Fragment, useMemo, useRef, useState } from "react";
 
 import { ETIQUETAS_CAMPO } from "@/lib/constants";
 import { EXTENSIONES_ACEPTADAS, parsearArchivoMRP } from "@/lib/excel";
-import { formatearNumero } from "@/lib/mrp-utils";
+import { formatearNumero, inicioDeReferencia } from "@/lib/mrp-utils";
 import { etiquetaMesAnio, ordenarMeses } from "@/lib/periodos";
 import type { CampoDestino, CampoTextoMRP, MesKey, RegistroMRP, ResultadoImportacion } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ interface PropsModalImportacion {
   abierto: boolean;
   onCerrar: () => void;
   /** Combina los registros con la tabla: actualiza los que ya existen y anexa los nuevos. */
-  onImportar: (registros: RegistroMRP[]) => void;
+  onImportar: (registros: RegistroMRP[], origen: { archivo: string; hoja: string }) => void;
   /** Meses del periodo activo: sirven para ubicar el año de los meses escritos sin año («Oct»). */
   mesesPeriodo: MesKey[];
 }
@@ -76,7 +76,7 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar, mesesPeriodo }
 
   const confirmar = () => {
     if (!resultado) return;
-    onImportar(registrosAImportar);
+    onImportar(registrosAImportar, { archivo: nombreArchivo, hoja: resultado.nombreHoja });
     cerrar();
   };
 
@@ -90,11 +90,12 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar, mesesPeriodo }
     return ordenarMeses(encontrados);
   }, [resultado]);
   /**
-   * Por defecto se importan los meses desde el inicio del periodo activo en adelante
-   * (p. ej. Oct–Dic 2026 y 2027); el histórico anterior queda sin marcar.
+   * Por defecto se importan los meses desde 12 antes del inicio del periodo activo en adelante
+   * (estando en 2027, también Nov y Dic 2026, que la tabla muestra como referencia del año anterior).
+   * El histórico más antiguo queda sin marcar.
    */
   const mesesPorDefecto = useMemo(
-    () => mesesArchivo.filter((mes) => mes >= (mesesPeriodo[0] ?? "")),
+    () => mesesArchivo.filter((mes) => mes >= (mesesPeriodo[0] ? inicioDeReferencia(mesesPeriodo[0]) : "")),
     [mesesArchivo, mesesPeriodo],
   );
   const mesesActivos = mesesElegidos ?? mesesPorDefecto;
@@ -259,7 +260,8 @@ export function ExcelImportModal({ abierto, onCerrar, onImportar, mesesPeriodo }
                   })}
                 </div>
                 <p className="mt-1.5 text-xs text-ink-3">
-                  Se marcan por defecto los meses desde el inicio del periodo activo. Marca otros para cargar histórico.
+                  Se marcan por defecto los meses del periodo activo y los 12 anteriores (estos se ven como referencia).
+                  Marca otros para cargar más histórico.
                 </p>
               </div>
             ) : null}
