@@ -26,6 +26,8 @@ export interface LecturaStockReal {
   fechas: string[];
   /** Filas que no se pudieron asociar a una materia prima, u otras observaciones. */
   avisos: string[];
+  /** Esas filas sin materia prima, con su última cifra. */
+  sinMateria: { nombre: string; tn: number; fecha: string }[];
 }
 
 const esNumero = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -69,6 +71,7 @@ export function interpretarStockReal(
 ): LecturaStockReal {
   const avisos: string[] = [];
   const porMp: LecturaStockReal["porMp"] = {};
+  const sinMateria: LecturaStockReal["sinMateria"] = [];
   const nombrePorClave = new Map<string, string>();
   for (const mp of materias) {
     for (const candidato of [mp.tasaMp, mp.nombre, mp.nombre.replace(/\s*\(.*\)\s*$/, "")]) {
@@ -96,6 +99,8 @@ export function interpretarStockReal(
       const id = nombrePorClave.get(claveNombre(nombre));
       if (!id) {
         avisos.push(`«${nombre}»: no hay una materia prima con ese nombre en Abastecimiento, no se importó.`);
+        const reciente = [...cifras].sort((a, b) => a.fecha.localeCompare(b.fecha)).at(-1)!;
+        sinMateria.push({ nombre, tn: fila[reciente.i] as number, fecha: reciente.fecha });
         continue;
       }
       for (const { i, fecha } of cifras) {
@@ -106,7 +111,7 @@ export function interpretarStockReal(
         if (!previo || nuevo.fecha >= previo.fecha) (porMp[id] ??= {})[mes] = nuevo;
       }
     }
-    if (Object.keys(porMp).length > 0) return { porMp, fechas, avisos };
+    if (Object.keys(porMp).length > 0) return { porMp, fechas, avisos, sinMateria };
   }
-  return { porMp, fechas: [], avisos: ["No se encontró una tabla de stock (nombres de materia prima y fechas en las columnas)."] };
+  return { porMp, fechas: [], sinMateria, avisos: ["No se encontró una tabla de stock (nombres de materia prima y fechas en las columnas)."] };
 }

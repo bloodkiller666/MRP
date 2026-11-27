@@ -1,6 +1,8 @@
 import type { StockRealMes } from "./abastecimiento";
 import { STOCK_REAL_STORAGE_KEY } from "./constants";
 import { enlazarDocumento, guardar } from "./persistencia";
+import { compararStock, type ComparacionStock, type MateriaComparable } from "./stock-comparacion";
+import type { LecturaStockReal } from "./stock-real";
 import type { MesKey } from "./types";
 
 /**
@@ -14,12 +16,18 @@ export interface CargaStockReal {
   importadoEn: string;
   /** Última fecha que traía el archivo. */
   hasta: string;
+  /** Ids de las materias primas que traía. */
+  materias?: string[];
+  /** Nombres de las filas que no correspondían a ninguna materia prima. */
+  sinMateria?: string[];
 }
 
 export interface EstadoStockReal {
   /** Por id de materia prima y mes. */
   porMp: Record<string, Record<MesKey, StockRealMes>>;
   cargas: CargaStockReal[];
+  /** Qué cambió con el último archivo subido. */
+  comparacion?: ComparacionStock;
 }
 
 const VACIO: EstadoStockReal = { porMp: {}, cargas: [] };
@@ -49,7 +57,10 @@ export function depurarStockReal(valor: unknown): EstadoStockReal | null {
   const cargas = Array.isArray(v.cargas)
     ? v.cargas.filter((c): c is CargaStockReal => !!c && typeof c.archivo === "string" && typeof c.hasta === "string")
     : [];
-  return { porMp, cargas };
+  const c = v.comparacion;
+  const comparacionValida =
+    !!c && typeof c.archivo === "string" && [c.filas, c.correcciones, c.nuevas, c.ausentes, c.sinMateria].every(Array.isArray);
+  return comparacionValida ? { porMp, cargas, comparacion: c } : { porMp, cargas };
 }
 
 /** Mezcla lo leído de un archivo con lo ya guardado. */
@@ -100,8 +111,30 @@ export const stockRealStore = {
   obtenerInstantanea: (): EstadoStockReal => estado,
   obtenerInstantaneaServidor: (): EstadoStockReal => VACIO,
 
-  importar(porMp: EstadoStockReal["porMp"], archivo: string, hasta: string): void {
-    establecer(combinarStockReal(estado, porMp, { archivo, importadoEn: new Date().toISOString(), hasta }));
+  /** Mezcla el archivo leído con lo guardado y anota qué cambió. */
+  importar(
+    lectura: Pick<LecturaStockReal, "porMp" | "sinMateria">,
+    archivo: string,
+    hasta: string,
+    materias: MateriaComparable[],
+  ): ComparacionStock {
+    const carga = { archivo, importadoEn: new Date().toISOString(), hasta };
+    const combinado = combinarStockReal(estado, lectura.porMp, {
+      ...carga,
+      materias: Object.keys(lectura.porMp),
+      sinMateria: lectura.sinMateria.map((s) => s.nombre),
+    });
+    const comparacion = compararStock({
+      antes: estado.porMp,
+      despues: combinado.porMp,
+      archivoNuevo: lectura.porMp,
+      materias,
+      sinMateria: lectura.sinMateria,
+      carga,
+      anterior: estado.cargas.at(-1) ?? null,
+    });
+    establecer({ ...combinado, comparacion });
+    return comparacion;
   },
 
   /** Solo para pruebas. */

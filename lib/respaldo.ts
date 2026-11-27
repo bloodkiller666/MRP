@@ -87,7 +87,9 @@ export function resumenRespaldo(documentos: Record<string, unknown>): { clave: s
     .map((clave) => {
       const v = documentos[clave];
       let detalle: string;
-      if (Array.isArray(v)) detalle = `${v.length} elemento(s)`;
+      const cambios = clave === "mrp:tasas:v1" ? (v as { cambios?: unknown } | null)?.cambios : undefined;
+      if (Array.isArray(cambios)) detalle = `${cambios.length} cambio(s) en el historial`;
+      else if (Array.isArray(v)) detalle = `${v.length} elemento(s)`;
       else if (typeof v === "object" && v !== null) {
         const n = Object.keys(v).length;
         detalle = clave === "mrp:cortes:v1" ? `${n} corte(s)` : `${n} campo(s)`;

@@ -74,6 +74,14 @@ function convertirCon(
       unidadMedida: unidad,
       proyecciones: escalar(registro.proyecciones, factor),
       reales: escalar(registro.reales, factor),
+      realesSemana:
+        registro.realesSemana &&
+        Object.fromEntries(
+          Object.entries(registro.realesSemana).map(([mes, semanas]) => [
+            mes,
+            semanas.map((v) => (v === null ? null : v * factor)),
+          ]),
+        ),
     };
   });
 }

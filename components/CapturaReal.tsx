@@ -3,15 +3,16 @@
 import { CheckCircle2, ClipboardPenLine, Inbox } from "lucide-react";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
+import { interpretarCantidad, textoCantidad } from "@/lib/cantidad";
 import { cumplimientoRegistro, formatearNumero, resumenPorUnidad } from "@/lib/mrp-utils";
 import {
   abarcaVariosAnios,
   claveMes,
   etiquetaMes,
   etiquetaMesAnio,
-  lunesDelMes,
   nombreMes,
 } from "@/lib/periodos";
+import { semanasDelMes } from "@/lib/semanas";
 import type { CampoTextoMRP, MesKey, RegistroMRP } from "@/lib/types";
 import { cn, parsearNumero } from "@/lib/utils";
 
@@ -48,34 +49,6 @@ const POR_PAGINA = 60;
 const TH_BASE = "rotulo sticky top-0 z-10 border-b border-line-strong px-3 py-2";
 const CLASES_CAJA =
   "num h-8 w-full rounded-md border border-field bg-surface px-2 text-right text-sm text-ink placeholder:text-ink-3 hover:border-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
-
-/**
- * Interpreta lo escrito en una caja de cantidad.
- *
- *  - `1500`        → 1500
- *  - `30+30+60`    → 120 (suma de despachos, como el total semanal del Excel)
- *  - `+30`         → lo ya cargado + 30 (añade un despacho al acumulado)
- *
- * Devuelve `null` si el texto no es válido y `undefined` si está vacío (borra el dato).
- */
-function interpretarCantidad(texto: string, actual: number | undefined): number | null | undefined {
-  const limpio = texto.trim();
-  if (limpio === "") return undefined;
-
-  const acumula = limpio.startsWith("+");
-  const partes = (acumula ? limpio.slice(1) : limpio).split("+");
-  let suma = acumula ? (actual ?? 0) : 0;
-  for (const parte of partes) {
-    const numero = parsearNumero(parte);
-    if (numero === undefined || numero < 0) return null;
-    suma += numero;
-  }
-  return Math.round(suma * 100) / 100;
-}
-
-function textoCantidad(valor: number | undefined): string {
-  return valor === undefined ? "" : String(Math.round(valor * 100) / 100);
-}
 
 function textoProbabilidad(valor: number | undefined): string {
   return valor === undefined ? "" : String(Math.round(valor * 100));
@@ -117,7 +90,7 @@ export function CapturaReal({
       ? mesActual
       : (meses[meses.length - 1] ?? "");
   const rotulo = abarcaVariosAnios(meses) ? etiquetaMesAnio : etiquetaMes;
-  const semanas = mes ? lunesDelMes(mes) : 4;
+  const semanas = mes ? semanasDelMes(mes).length : 4;
   const esReal = modo === "real";
 
   const campo = esReal ? "reales" : "proyecciones";
@@ -354,7 +327,7 @@ export function CapturaReal({
                   <th className={cn(TH_BASE, "bg-surface-2 text-right text-ink-2")}>Pronóstico {rotulo(mes)}</th>
                   <th
                     className={cn(TH_BASE, "hidden bg-surface-2 text-right text-ink-2 md:table-cell")}
-                    title={`Pronóstico del mes ÷ ${semanas} semanas (lunes del mes), como la distribución semanal del Excel`}
+                    title={`Pronóstico del mes ÷ ${semanas} semanas del mes, como la distribución semanal del Excel`}
                   >
                     Previsto / sem.
                   </th>

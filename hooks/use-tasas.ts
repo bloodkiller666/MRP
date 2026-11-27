@@ -3,20 +3,19 @@
 import { useSyncExternalStore } from "react";
 
 import { tasasStore } from "@/lib/tasas-store";
-import type { TasaMP } from "@/lib/tasas";
+import type { Tasas } from "@/lib/tasas";
 
 export interface TasasHook {
-  tasas: TasaMP[];
-  actualizar: (mp: string, cambios: Partial<Pick<TasaMP, "valor" | "unidad">>) => void;
-  restaurar: () => void;
+  tasas: Tasas;
+  registrarCambio: typeof tasasStore.registrarCambio;
 }
 
-/** Acceso a la tasa de conversiones desde React. */
+/** Acceso a la tasa de conversiones y su historial desde React. */
 export function useTasas(): TasasHook {
   const tasas = useSyncExternalStore(
     tasasStore.suscribir,
     tasasStore.obtenerInstantanea,
     tasasStore.obtenerInstantaneaServidor,
   );
-  return { tasas, actualizar: tasasStore.actualizar, restaurar: tasasStore.restaurar };
+  return { tasas, registrarCambio: tasasStore.registrarCambio };
 }

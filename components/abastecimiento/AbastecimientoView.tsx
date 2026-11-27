@@ -8,7 +8,7 @@ import { useCortes } from "@/hooks/use-cortes";
 import { useHistorialMp } from "@/hooks/use-historial-mp";
 import { useStockReal } from "@/hooks/use-stock-real";
 import { useTasas } from "@/hooks/use-tasas";
-import { calcularPlan, MES_INICIO, type CompraSugerida, type EntradaPlan, type MateriaPrima } from "@/lib/abastecimiento";
+import { calcularPlan, claveDeFecha, MES_INICIO, type CompraSugerida, type EntradaPlan, type MateriaPrima } from "@/lib/abastecimiento";
 import { construirEvolucion } from "@/lib/evolucion-mp";
 import { esCierreDeMes, interpretarStockReal } from "@/lib/stock-real";
 import { exportarAbastecimientoExcel, type PlanConMateria } from "@/lib/abastecimiento-excel";
@@ -19,7 +19,7 @@ import { parsearMb51 } from "@/lib/mb51";
 import { esAtajoDeshacer } from "@/lib/historial";
 import { navegarPestanas } from "@/lib/teclado";
 import { etiquetaMesAnio } from "@/lib/periodos";
-import { calcularTasa } from "@/lib/tasas";
+import { calcularTasa, tasaDelMes, type Tasas } from "@/lib/tasas";
 import type { MesKey, RegistroMRP } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,8 @@ import { EstadoCarga } from "./EstadoCarga";
 import { EvolucionMateria } from "./EvolucionMateria";
 import { GrillaMateria } from "./GrillaMateria";
 import { ReporteCompras } from "./ReporteCompras";
+import { TasasConversion } from "./TasasConversion";
+import { CambiosStock } from "./CambiosStock";
 
 interface PropsAbastecimiento {
   /** Registros actuales de Seguimiento, con la mezcla (emulsión, polímero, aditivo) ya aplicada. */
@@ -55,8 +57,9 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
   const { historial } = useHistorialMp();
   const { stockReal, importar: importarStockReal } = useStockReal();
   const entradaStock = useRef<HTMLInputElement>(null);
+  const [verCambiosStock, setVerCambiosStock] = useState(false);
   const historialHasta = historial.cortes.at(-1)?.mes ?? null;
-  const { tasas } = useTasas();
+  const { tasas, registrarCambio } = useTasas();
   // Mes de hoy: la vista solo se monta al abrir la pestaña, así que no choca con la hidratación.
   const [hoy] = useState(() => new Date());
   const entradaArchivo = useRef<HTMLInputElement>(null);
@@ -125,7 +128,7 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
         mp,
         entrada,
         plan: calcularPlan(entrada),
-        fuente: describirFuente(mp, tasas),
+        fuente: describirFuente(mp, tasas, claveDeFecha(hoy)),
       };
     });
   }, [estado, demanda, tasas, hoy, stockReal, historial]);
@@ -194,7 +197,8 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
       const cantidad = Object.keys(lectura.porMp).length;
       if (cantidad === 0) throw new Error(lectura.avisos[0] ?? "No se encontró ningún stock en el archivo.");
       const hasta = lectura.fechas.at(-1) ?? "";
-      importarStockReal(lectura.porMp, archivo.name, hasta);
+      importarStockReal(lectura, archivo.name, hasta, estado.materias);
+      setVerCambiosStock(true);
       const fijos = lectura.fechas.filter((f) => esCierreDeMes(f)).length;
       const parcial = lectura.fechas.length - fijos;
       setMensaje({
@@ -202,7 +206,7 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
         texto:
           `Stock real cargado: ${cantidad} materias primas, ${fijos} cierre${fijos === 1 ? "" : "s"} de mes` +
           (parcial > 0 ? ` y ${parcial} medición${parcial === 1 ? "" : "es"} a la fecha (hasta el ${formatearFechaIso(hasta)}, aún puede cambiar)` : "") +
-          "." +
+          ". Abajo, en «Cambios del último stock», está la comparación con lo anterior." +
           (lectura.avisos.length > 0 ? ` ${lectura.avisos.join(" ")}` : ""),
       });
     } catch (error) {
@@ -352,7 +356,7 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
       <EstadoCarga
         entrada={{
           anio: hoy.getFullYear(),
-          mesActual: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`,
+          mesActual: claveDeFecha(hoy),
           cortes,
           historial: historial.cortes,
           stockPorMp: stockReal.porMp,
@@ -426,6 +430,12 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
           sus ingresos. Cargue el lote real en los parámetros de cada materia prima.
         </p>
       ) : null}
+
+      {stockReal.comparacion ? (
+        <CambiosStock comparacion={stockReal.comparacion} abierto={verCambiosStock} onAlternar={() => setVerCambiosStock((v) => !v)} />
+      ) : null}
+
+      <TasasConversion tasas={tasas} mesActual={claveDeFecha(hoy)} onCambiar={registrarCambio} />
 
       <ReporteCompras
         compras={compras}
@@ -523,7 +533,7 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
                 .flatMap((m) => m.codigosSap.map((c) => [c, m.nombre] as const)),
             )
           }
-          tasasDisponibles={tasas.map((t) => t.mp)}
+          tasasDisponibles={tasas.base.map((t) => t.mp)}
           onCerrar={() => setModalMateria(null)}
           onGuardar={(resultado: ResultadoFormMateria) => {
             if (resultado.modo === "crear") {
@@ -542,11 +552,11 @@ export function AbastecimientoView({ registros }: PropsAbastecimiento) {
   );
 }
 
-function describirFuente(mp: MateriaPrima, tasas: ReturnType<typeof useTasas>["tasas"]): string {
+function describirFuente(mp: MateriaPrima, tasas: Tasas, mesActual: MesKey): string {
   if (!mp.regla || !mp.tasaMp) return "Consumo futuro: promedio de los últimos 3 meses (sin regla en la demanda)";
-  const tasa = tasas.find((t) => t.mp === mp.tasaMp);
+  const tasa = tasaDelMes(tasas, mp.tasaMp, mesActual);
   if (!tasa) return "Consumo futuro: promedio de los últimos 3 meses (falta la tasa)";
   const kg = calcularTasa(tasa).kgPorCisterna;
   const campo = mp.regla.campo === "emulsion" ? "emulsión" : mp.regla.campo === "polimero" ? "polímero" : "aditivo";
-  return `Consumo futuro: cisternas con ${campo} ${mp.regla.valor} × ${new Intl.NumberFormat("es-PE", { maximumFractionDigits: 0 }).format(kg)} kg por cisterna`;
+  return `Consumo futuro: cisternas con ${campo} ${mp.regla.valor} × ${new Intl.NumberFormat("es-PE", { maximumFractionDigits: 0 }).format(kg)} kg por cisterna (tasa de ${etiquetaMesAnio(mesActual)})`;
 }

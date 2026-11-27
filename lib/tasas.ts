@@ -1,4 +1,5 @@
 import { GALONES_POR_CISTERNA } from "./conversion";
+import type { MesKey } from "./types";
 
 /**
  * Tasa de conversiones: cuánta materia prima (MP) lleva cada cisterna.
@@ -45,6 +46,53 @@ export function calcularTasa({ valor, unidad }: Pick<TasaMP, "valor" | "unidad">
     tmPorCisterna: kgPorCisterna / 1000,
     galonesPorCisterna: kgPorCisterna / LITROS_POR_GALON,
   };
+}
+
+/** Un cambio de tasa hecho en la aplicación. El historial solo crece: no se edita ni se borra. */
+export interface CambioTasa {
+  id: string;
+  /** Momento en que se registró (ISO 8601). */
+  fecha: string;
+  mp: string;
+  /** Primer mes en que rige la tasa nueva. */
+  desde: MesKey;
+  /** Fracción de la cisterna que regía en ese mes antes del cambio. */
+  anterior: number;
+  /** Fracción de la cisterna desde ese mes. */
+  nueva: number;
+}
+
+export interface Tasas {
+  /** Tasa de partida de cada materia prima (la del Excel): rige mientras no haya un cambio. */
+  base: TasaMP[];
+  /** Cambios en el orden en que se registraron. */
+  cambios: CambioTasa[];
+}
+
+/**
+ * La tasa de una materia prima en un mes: la del cambio con el `desde` más reciente que no pase de ese mes
+ * (si dos rigen desde el mismo mes, el último registrado). Sin cambios aplicables, la de partida.
+ */
+export function tasaDelMes({ base, cambios }: Tasas, mp: string, mes: MesKey): TasaMP | null {
+  const partida = base.find((t) => t.mp === mp);
+  if (!partida) return null;
+  let vigente: CambioTasa | null = null;
+  for (const cambio of cambios) {
+    if (cambio.mp !== mp || cambio.desde > mes) continue;
+    if (!vigente || cambio.desde >= vigente.desde) vigente = cambio;
+  }
+  return vigente ? { mp, valor: vigente.nueva, unidad: "% CISTERNA" } : partida;
+}
+
+/** El primer mes posterior a `mes` en que ya hay otro cambio registrado para la materia prima. */
+export function siguienteCambio({ cambios }: Tasas, mp: string, mes: MesKey): MesKey | null {
+  const posteriores = cambios.filter((c) => c.mp === mp && c.desde > mes).map((c) => c.desde);
+  return posteriores.sort()[0] ?? null;
+}
+
+/** Dos fracciones que se ven iguales en pantalla (porcentaje con 5 decimales). */
+export function mismaTasa(a: number, b: number): boolean {
+  return Math.abs(a - b) < 5e-8;
 }
 
 /** Valores del Excel, en el mismo orden de la hoja. */

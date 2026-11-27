@@ -15,7 +15,6 @@ import {
   Plus,
   RotateCcw,
   Save,
-  Scale,
   Table2,
   Trash2,
   Undo2,
@@ -47,7 +46,6 @@ import { RealPorMateria } from "@/components/RealPorMateria";
 import { RegistroFormModal } from "@/components/RegistroFormModal";
 import { ReportModal } from "@/components/ReportModal";
 import { RespaldoModal } from "@/components/RespaldoModal";
-import { TasaConversionesModal } from "@/components/TasaConversionesModal";
 import { SelectorPeriodo, SummaryCards } from "@/components/SummaryCards";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useCatalogo } from "@/hooks/use-catalogo";
@@ -67,6 +65,8 @@ import { esAtajoDeshacer } from "@/lib/historial";
 import { navegarPestanas } from "@/lib/teclado";
 
 import { EsqueletoSeguimiento } from "./ui/Esqueleto";
+import { SeguimientoSemanal } from "./SeguimientoSemanal";
+import { detalleSemanal } from "@/lib/semanas";
 import { exportarRegistrosExcel } from "@/lib/excel";
 import {
   combinarOpciones,
@@ -122,6 +122,7 @@ export function MRPApp() {
     actualizarCampo: actualizarCampoActual,
     actualizarProyeccion: actualizarProyeccionActual,
     actualizarReal: actualizarRealActual,
+    actualizarRealSemana: actualizarRealSemanaActual,
     actualizarProbabilidad: actualizarProbabilidadActual,
     actualizarComentario: actualizarComentarioActual,
     eliminar: eliminarActual,
@@ -165,12 +166,13 @@ export function MRPApp() {
   const [modoUnidad, setModoUnidad] = useState<"original" | "tm" | "cisternas">("original");
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoCumplimiento | "">("");
   const [vista, setVista] = useState<Vista>("seguimiento");
+  /** Cómo se revisa Seguimiento: la tabla por meses o un mes semana por semana. */
+  const [ritmo, setRitmo] = useState<"mensual" | "semanal">("mensual");
   const [modalImportar, setModalImportar] = useState(false);
   const [modalCorte, setModalCorte] = useState(false);
   const [modalRespaldo, setModalRespaldo] = useState(false);
   const [modalComparar, setModalComparar] = useState(false);
   const [modalReporte, setModalReporte] = useState(false);
-  const [modalTasas, setModalTasas] = useState(false);
   const [modalFormulario, setModalFormulario] = useState(false);
   const [registroEditando, setRegistroEditando] = useState<RegistroMRP | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -280,6 +282,7 @@ export function MRPApp() {
   const actualizarCampo = protegida(actualizarCampoActual);
   const actualizarProyeccion = protegida(actualizarProyeccionActual);
   const actualizarReal = protegida(actualizarRealActual);
+  const actualizarRealSemana = protegida(actualizarRealSemanaActual);
   const actualizarProbabilidad = protegida(actualizarProbabilidadActual);
   const actualizarComentario = protegida(actualizarComentarioActual);
   const eliminar = protegida(eliminarActual);
@@ -433,7 +436,16 @@ export function MRPApp() {
   };
   const editarProyeccion = (id: string, mes: MesKey, valor?: number) =>
     actualizarProyeccion(id, mes, aUnidadOriginal(id, valor));
-  const editarReal = (id: string, mes: MesKey, valor?: number) => actualizarReal(id, mes, aUnidadOriginal(id, valor));
+  const editarReal = (id: string, mes: MesKey, valor?: number) => {
+    const nuevo = aUnidadOriginal(id, valor);
+    const anterior = registrosGuardados.find((r) => r.id === id);
+    actualizarReal(id, mes, nuevo);
+    if (anterior && nuevo !== anterior.reales[mes] && detalleSemanal(anterior, mes)) {
+      mostrarAviso(`${anterior.cuenta}: al cambiar el total del mes, el real queda sin detalle por semanas.`, true);
+    }
+  };
+  const editarRealSemana = (id: string, mes: MesKey, semana: number, valor?: number) =>
+    actualizarRealSemana(id, mes, semana, aUnidadOriginal(id, valor));
   const editarCampo = (id: string, campo: CampoTextoMRP, valor: string) => {
     if (enTM && campo === "unidadMedida") {
       mostrarAviso("En esta vista no se cambia la unidad: vuelve a «UM original» para editarla.");
@@ -623,12 +635,6 @@ export function MRPApp() {
                   icono: <BarChart3 className="size-4" />,
                   alElegir: () => setModalReporte(true),
                   deshabilitada: sinResultados,
-                },
-                {
-                  etiqueta: "Tasa de conversiones",
-                  detalle: "Materia prima por cisterna (kg, TM, galones)",
-                  icono: <Scale className="size-4" />,
-                  alElegir: () => setModalTasas(true),
                 },
                 {
                   etiqueta: "Respaldo y restauración",
@@ -846,7 +852,7 @@ export function MRPApp() {
                   <span className="text-xs text-ink-3">({sinDatosEnPeriodo} sin datos)</span>
                 </label>
               ) : null}
-              {vista === "seguimiento" ? (
+              {vista === "seguimiento" && ritmo === "mensual" ? (
                 <ColumnasSelector
                   ocultas={ocultas}
                   alAlternar={alternarColumna}
@@ -873,6 +879,36 @@ export function MRPApp() {
           />
         ) : vista === "seguimiento" ? (
           <>
+          <div
+            role="radiogroup"
+            aria-label="Revisar Seguimiento por"
+            className="inline-flex self-start rounded-lg border border-line-strong bg-surface p-0.5"
+          >
+            {(
+              [
+                ["mensual", "Mensual"],
+                ["semanal", "Semanal"],
+              ] as const
+            ).map(([clave, etiqueta]) => (
+              <button
+                key={clave}
+                type="button"
+                role="radio"
+                aria-checked={ritmo === clave}
+                onClick={() => setRitmo(clave)}
+                className={cn(
+                  "h-8 rounded-md px-4 text-sm font-semibold transition-colors",
+                  ritmo === clave ? "bg-accent text-accent-ink shadow-sm" : "text-ink-2 hover:bg-surface-3 hover:text-ink",
+                )}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+          {ritmo === "semanal" ? (
+            <SeguimientoSemanal registros={registrosMostrados} meses={meses} alActualizarRealSemana={editarRealSemana} />
+          ) : (
+          <>
           <CumplimientoCortes />
           <RealPorMateria meses={meses} />
           <MRPTable
@@ -887,6 +923,8 @@ export function MRPApp() {
             alEliminar={alEliminar}
             alEditarFila={abrirEdicion}
           />
+          </>
+          )}
           </>
         ) : (
           <Dashboard registros={registrosMostrados} meses={meses} alCargarVendedor={cargarDeVendedor} />
@@ -1008,8 +1046,6 @@ export function MRPApp() {
           onQuitar={quitarPeriodo}
         />
       ) : null}
-
-      {modalTasas ? <TasaConversionesModal abierto onCerrar={() => setModalTasas(false)} /> : null}
 
       {modalReporte ? (
         <ReportModal

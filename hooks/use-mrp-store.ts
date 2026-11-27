@@ -17,6 +17,7 @@ export interface MrpStore {
   actualizarCampo: (id: string, campo: CampoTextoMRP, valor: string) => void;
   actualizarProyeccion: (id: string, mes: MesKey, valor?: number) => void;
   actualizarReal: (id: string, mes: MesKey, valor?: number) => void;
+  actualizarRealSemana: (id: string, mes: MesKey, semana: number, valor?: number) => void;
   actualizarProbabilidad: (id: string, probabilidad?: number) => void;
   actualizarComentario: (id: string, comentario: string) => void;
   eliminar: (id: string) => void;
@@ -65,6 +66,7 @@ export function useMrpStore(): MrpStore {
     actualizarCampo: mrpStore.actualizarCampo,
     actualizarProyeccion: mrpStore.actualizarProyeccion,
     actualizarReal: mrpStore.actualizarReal,
+    actualizarRealSemana: mrpStore.actualizarRealSemana,
     actualizarProbabilidad: mrpStore.actualizarProbabilidad,
     actualizarComentario: mrpStore.actualizarComentario,
     eliminar: mrpStore.eliminar,

@@ -3,6 +3,7 @@ import { crearHistorial } from "./historial";
 import { enlazarDocumento, guardar } from "./persistencia";
 import { REGISTROS_MOCK } from "./mock-data";
 import { migrarCantidades } from "./periodos";
+import { conRealSemana, depurarRealesSemana } from "./semanas";
 import type { CampoTextoMRP, MesKey, RegistroMRP } from "./types";
 import { generarId, normalizarTexto } from "./utils";
 
@@ -81,6 +82,7 @@ export function normalizar(registro: Partial<RegistroMRP>): RegistroMRP {
     otrosAditivos: registro.otrosAditivos ?? "",
     proyecciones: migrarCantidades(registro.proyecciones),
     reales: migrarCantidades(registro.reales),
+    realesSemana: depurarRealesSemana(registro.realesSemana),
     probabilidad: probabilidadValida(registro.probabilidad),
     comentario: registro.comentario || undefined,
   };
@@ -224,6 +226,11 @@ export const mrpStore = {
         return { ...registro, reales: { ...registro.reales, [mes]: valor } };
       }),
     );
+  },
+
+  /** Edición del real de una semana: el total del mes pasa a ser la suma de sus semanas. */
+  actualizarRealSemana(id: string, mes: MesKey, semana: number, valor?: number): void {
+    establecer(estado.map((registro) => (registro.id === id ? conRealSemana(registro, mes, semana, valor) : registro)));
   },
 
   /**

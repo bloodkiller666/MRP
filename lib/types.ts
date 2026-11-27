@@ -49,6 +49,11 @@ export interface RegistroMRP {
   /** Despacho real (meses cerrados) + avance (mes en curso). */
   reales: CantidadesMes;
   /**
+   * Detalle del real por semana de cada mes (`null` = semana sin dato). El total del mes sigue en
+   * `reales`; si deja de coincidir con la suma, el detalle no se usa (ver `lib/semanas.ts`).
+   */
+  realesSemana?: Record<MesKey, (number | null)[]>;
+  /**
    * Probabilidad de cierre (0-1) con la que se ponderó el pronóstico, como en la columna
    * PROB del Excel (`volumen × PROB`). Sin valor = 100 %. Las cantidades de `proyecciones`
    * ya vienen ponderadas.
@@ -59,7 +64,7 @@ export interface RegistroMRP {
 }
 
 /** Campos de texto editables de un registro. */
-export type CampoTextoMRP = Exclude<keyof RegistroMRP, "id" | "proyecciones" | "reales" | "probabilidad" | "comentario">;
+export type CampoTextoMRP = Exclude<keyof RegistroMRP, "id" | "proyecciones" | "reales" | "realesSemana" | "probabilidad" | "comentario">;
 
 /**
  * Columnas de datos que el usuario puede **ocultar** para despejar la vista.

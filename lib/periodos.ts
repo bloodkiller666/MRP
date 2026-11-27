@@ -176,15 +176,3 @@ export function periodosFaltantes(meses: Iterable<MesKey>, existentes: Periodo[]
   const sueltos = ordenarMeses([...meses].filter((mes) => !cubiertos.has(mes)));
   return [...new Set(sueltos.map(anioDeMes))].map(periodoAnual);
 }
-
-/** Cantidad de lunes del mes: las semanas con las que el Excel reparte el pronóstico mensual (4 o 5). */
-export function lunesDelMes(clave: MesKey): number {
-  const anio = anioDeMes(clave);
-  const indice = indiceDeMes(clave);
-  const dias = new Date(anio, indice + 1, 0).getDate();
-  let lunes = 0;
-  for (let dia = 1; dia <= dias; dia++) {
-    if (new Date(anio, indice, dia).getDay() === 1) lunes += 1;
-  }
-  return lunes;
-}

@@ -1,7 +1,7 @@
 import { convertirACisternas, UNIDAD_CISTERNAS } from "./conversion";
 import { fraccionEmul01, listaOtrosAditivos } from "./mezclas";
 import type { MateriaPrima } from "./abastecimiento";
-import { calcularTasa, type TasaMP } from "./tasas";
+import { calcularTasa, tasaDelMes, type Tasas } from "./tasas";
 import type { MesKey, RegistroMRP } from "./types";
 
 /**
@@ -60,18 +60,17 @@ export function extraerDemanda(registros: RegistroMRP[]): DemandaEnCisternas {
   };
 }
 
-/** Consumo proyectado (TN por mes) de una MP, o `null` si no tiene regla o no tiene tasa. */
+/** Consumo proyectado (TN por mes) de una MP con la tasa vigente en cada mes, o `null` si no tiene regla o tasa. */
 export function consumoPronosticado(
   mp: Pick<MateriaPrima, "regla" | "tasaMp">,
   demanda: DemandaEnCisternas,
-  tasas: TasaMP[],
+  tasas: Tasas,
 ): Record<MesKey, number> | null {
-  if (!mp.regla || !mp.tasaMp) return null;
-  const tasa = tasas.find((t) => t.mp === mp.tasaMp);
-  if (!tasa) return null;
-  const kgPorCisterna = calcularTasa(tasa).kgPorCisterna;
+  const { regla, tasaMp } = mp;
+  if (!regla || !tasaMp || !tasas.base.some((t) => t.mp === tasaMp)) return null;
   const resultado: Record<MesKey, number> = {};
-  for (const [mes, cisternas] of Object.entries(demanda.cisternas(mp.regla.campo, mp.regla.valor))) {
+  for (const [mes, cisternas] of Object.entries(demanda.cisternas(regla.campo, regla.valor))) {
+    const { kgPorCisterna } = calcularTasa(tasaDelMes(tasas, tasaMp, mes)!);
     resultado[mes] = (cisternas * kgPorCisterna) / 1000;
   }
   return resultado;
