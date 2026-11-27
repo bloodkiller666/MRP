@@ -83,9 +83,9 @@ import {
   claveMes,
   etiquetaMesAnio,
   etiquetaRango,
-  indiceDeMes,
   mesesDePeriodo,
   ordenarMeses,
+  periodoAnual,
   periodosFaltantes,
 } from "@/lib/periodos";
 import { AvisoSync, EstadoSync } from "@/components/ui/EstadoSync";
@@ -201,13 +201,8 @@ export function MRPApp() {
   // Meses del año anterior con cifras: se muestran en la tabla como referencia (no suman en totales).
   const mesesReferencia = useMemo(() => mesesDeReferencia(registros, mesesPeriodo), [registros, mesesPeriodo]);
 
-  /** Mes siguiente al último periodo: punto de partida sugerido al crear uno nuevo. */
-  const mesSugerido = useMemo(() => {
-    const ultimos = periodos.map((p) => mesesDePeriodo(p).at(-1) ?? p.desde).sort();
-    const ultimo = ultimos[ultimos.length - 1] ?? periodoActivo.desde;
-    const siguiente = anioDeMes(ultimo) * 12 + indiceDeMes(ultimo) + 1;
-    return { anio: Math.floor(siguiente / 12), indiceMes: siguiente % 12 };
-  }, [periodos, periodoActivo]);
+  /** Año siguiente al último periodo: el que se sugiere al crear uno nuevo. */
+  const anioSugerido = useMemo(() => Math.max(...periodos.map((p) => anioDeMes(p.desde))) + 1, [periodos]);
 
   /** Vista con todos los filtros salvo el semáforo: base de los contadores del semáforo. */
   const registrosParaSemaforo = useMemo(() => {
@@ -335,7 +330,7 @@ export function MRPApp() {
       setPeriodoElegido(null);
       return;
     }
-    const periodo: Periodo = { desde: `${anioDeMes(valor)}-01`, cantidad: 12 };
+    const periodo = periodoAnual(anioDeMes(valor));
     agregarPeriodos([periodo]);
     setPeriodoElegido(periodo);
     if (vista === "real") setVista("seguimiento");
@@ -1004,7 +999,7 @@ export function MRPApp() {
           abierto
           onCerrar={() => setModalPeriodo(false)}
           periodos={periodos}
-          sugerido={mesSugerido}
+          anioSugerido={anioSugerido}
           onCrear={(periodo) => {
             agregarPeriodos([periodo]);
             elegirPeriodo(periodo);

@@ -52,7 +52,7 @@ interface CorteMinimo {
   registros: RegistroMRP[];
 }
 
-/** El real + avance del mes del corte: lo de «Resumen Despachos» si vino, y si no, la columna del mes en «Base de datos». */
+/** El real + avance del mes del corte: la columna del mes en «Base de datos» (o el real guardado en el registro, si lo tiene). */
 function conRealDelMes(registros: RegistroMRP[], mes: MesKey): RegistroMRP[] {
   return registros.map((r) => ({
     ...r,

@@ -204,7 +204,7 @@ export function SummaryCards({
   );
 }
 
-/** Selector de periodo (Oct – Dic 2026, Ene – Mar 2027…) y del mes hasta el que se quiere ver. */
+/** Selector de periodo (Ene – Dic 2026, Ene – Dic 2027…) y del mes hasta el que se quiere ver. */
 export function SelectorPeriodo({
   periodos,
   periodoActivo,

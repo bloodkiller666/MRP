@@ -4,8 +4,8 @@ import type { CantidadesMes, MesKey, Periodo } from "./types";
  * Meses y periodos.
  *
  * Un mes se identifica con la clave `AAAA-MM` (p. ej. `2026-10`), de modo que el
- * seguimiento no queda atado a un año: se pueden abrir periodos como «Ene – Mar 2027»
- * y conservar los anteriores como histórico.
+ * seguimiento no queda atado a un año: cada periodo es un año completo («Ene – Dic 2027»)
+ * y los anteriores se conservan como histórico.
  */
 
 export const MESES_ES: ReadonlyArray<{ label: string; nombre: string }> = [
@@ -39,8 +39,8 @@ export const ALIAS_MES: ReadonlyArray<readonly string[]> = [
   ["dic", "diciembre", "dec", "december"],
 ];
 
-/** Periodo con el que arranca la aplicación (el seguimiento de octubre a diciembre de 2026). */
-export const PERIODO_INICIAL: Periodo = { desde: "2026-10", cantidad: 3 };
+/** Periodo con el que arranca la aplicación (todo el año 2026). */
+export const PERIODO_INICIAL: Periodo = { desde: "2026-01", cantidad: 12 };
 
 /** Claves antiguas (versión anterior, sin año) y su equivalente. */
 const CLAVES_HEREDADAS: Record<string, MesKey> = {
@@ -162,34 +162,19 @@ export function resolverMesSinAnio(indice: number, mesesPeriodo: MesKey[]): MesK
   return claveMes(anioDeMes(mesesPeriodo[0] ?? PERIODO_INICIAL.desde), indice);
 }
 
+/** El periodo de un año completo, de enero a diciembre: el único tipo de periodo que se maneja. */
+export function periodoAnual(anio: number): Periodo {
+  return { desde: claveMes(anio, 0), cantidad: 12 };
+}
+
 /**
- * Agrupa los meses que ningún periodo cubre en periodos nuevos (de hasta 12 meses),
- * para que lo importado con meses fuera de los periodos existentes quede visible.
+ * Años que ningún periodo cubre, como periodos nuevos, para que lo importado
+ * con meses fuera de los periodos existentes quede visible.
  */
 export function periodosFaltantes(meses: Iterable<MesKey>, existentes: Periodo[]): Periodo[] {
   const cubiertos = new Set(existentes.flatMap(mesesDePeriodo));
   const sueltos = ordenarMeses([...meses].filter((mes) => !cubiertos.has(mes)));
-  if (sueltos.length === 0) return [];
-
-  const nuevos: Periodo[] = [];
-  let inicio = sueltos[0];
-  let fin = sueltos[0];
-  const indiceAbsoluto = (clave: MesKey) => anioDeMes(clave) * 12 + indiceDeMes(clave);
-
-  const cerrar = () => nuevos.push({ desde: inicio, cantidad: indiceAbsoluto(fin) - indiceAbsoluto(inicio) + 1 });
-
-  for (const mes of sueltos.slice(1)) {
-    // Se agrupa por año calendario para no crear periodos enormes por un mes lejano.
-    if (anioDeMes(mes) === anioDeMes(fin) && indiceAbsoluto(mes) - indiceAbsoluto(inicio) < 12) {
-      fin = mes;
-    } else {
-      cerrar();
-      inicio = mes;
-      fin = mes;
-    }
-  }
-  cerrar();
-  return nuevos;
+  return [...new Set(sueltos.map(anioDeMes))].map(periodoAnual);
 }
 
 /** Cantidad de lunes del mes: las semanas con las que el Excel reparte el pronóstico mensual (4 o 5). */

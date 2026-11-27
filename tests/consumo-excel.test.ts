@@ -46,7 +46,13 @@ function libroDePrueba() {
     relleno([null, "Stock Final del Mes", "TN", 8, 7, 6, 5]),
   ]);
   XLSX.utils.book_append_sheet(libro, resumen, "RESUMEN ITERTIX");
-  XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([["x"]]), "Resumen Despachos");
+  // La hoja «Resumen Despachos» sigue viniendo en el libro, con cifras, pero ya no se usa.
+  const despachos = XLSX.utils.aoa_to_sheet([
+    ["Cuenta", "Proyecto", "Detalle Producto", fecha(2026, 1), fecha(2026, 2)],
+    ["CLIENTE A", "OBRA 1", "EMULTEC CQS-1HP", 1, 0.5],
+    ["CLIENTE C", "OBRA 9", "EMULTEC CSS-1H", 3, 0],
+  ]);
+  XLSX.utils.book_append_sheet(libro, despachos, "Resumen Despachos");
   return libro;
 }
 
@@ -147,45 +153,13 @@ describe("acumulación del historial mes a mes", () => {
   });
 });
 
-describe("real + avance (hoja Resumen Despachos)", () => {
-  function libroConDespachos() {
-    const libro = libroDePrueba();
-    delete libro.Sheets["Resumen Despachos"];
-    libro.SheetNames = libro.SheetNames.filter((n) => n !== "Resumen Despachos");
-    const cab = ["Cuenta", "Proyecto", "Grupo Linea", "Detalle Producto", "Refineria", "Tipo PEN", "Propietario", " dic-25", fecha(2026, 1), fecha(2026, 2), fecha(2026, 3)];
-    const hoja = XLSX.utils.aoa_to_sheet([
-      [null],
-      cab,
-      ["CLIENTE A", "OBRA 1", "EMULSION ASFALTICA", "EMULTEC CQS-1HP", "PETROPERU", "PEN 60/70", "Ana", 0, 1, 0.5, 0],
-      ["CLIENTE B", "OBRA 1", "ASFALTOS MODIFICADOS", "BETUTEC IC", "REPSOL", "PEN 60/70", "Ana", 0, 0, 0, 2],
-      ["CLIENTE C", "OBRA 9", "EMULSION ASFALTICA", "EMULTEC CSS-1H", "PETROPERU", "PEN 60/70", "Luis", 0, 3, 0, 0],
-      ["Total general", null, null, null, null, null, null, 0, 4, 0.5, 2],
-    ]);
-    XLSX.utils.book_append_sheet(libro, hoja, "Resumen Despachos");
-    return libro;
-  }
-  const r = interpretarLibroMensual(XLSX, libroConDespachos(), "x.xlsx", "2026-01");
+describe("hoja Resumen Despachos (en desuso)", () => {
+  const r = interpretarLibroMensual(XLSX, libroDePrueba(), "x.xlsx", "2026-01");
 
-  it("carga los meses como real en la unidad del registro (cisternas → GLN / KG)", () => {
-    const a = r.registros.find((x) => x.cuenta === "CLIENTE A");
-    expect(a?.reales).toEqual({ "2026-01": 8000, "2026-02": 4000 });
-    const b = r.registros.find((x) => x.cuenta === "CLIENTE B");
-    expect(b?.reales["2026-03"]).toBeCloseTo(2 * 8000 * 3.785, 0);
-  });
-  it("agrega las filas que no estaban en Base de datos, sin la fila de totales", () => {
-    const c = r.registros.find((x) => x.cuenta === "CLIENTE C");
-    expect(c?.proyecciones).toEqual({});
-    expect(c?.reales["2026-01"]).toBe(24000);
-    expect(r.registros.some((x) => /total/i.test(x.cuenta))).toBe(false);
-    expect(r.avisos.some((a) => a.includes("Resumen Despachos") && a.includes("1 no estaban"))).toBe(true);
-  });
-  it("marca el corte sin despachos cuando la hoja es un placeholder o no existe, y no cuando sí trae", () => {
-    expect(r.sinDespachos).toBe(false);
-    expect(interpretarLibroMensual(XLSX, libroDePrueba(), "x.xlsx", "2026-01").sinDespachos).toBe(true);
-    const sinHoja = libroDePrueba();
-    delete sinHoja.Sheets["Resumen Despachos"];
-    sinHoja.SheetNames = sinHoja.SheetNames.filter((n) => n !== "Resumen Despachos");
-    expect(interpretarLibroMensual(XLSX, sinHoja, "x.xlsx", "2026-01").sinDespachos).toBe(true);
+  it("no carga real, no agrega filas ni genera avisos o controles", () => {
+    expect(r.registros.map((x) => x.cuenta)).toEqual(["CLIENTE A", "CLIENTE B"]);
+    expect(r.registros.every((x) => Object.keys(x.reales).length === 0)).toBe(true);
+    expect([...r.avisos, ...r.controles.map((c) => c.grupo)].join(" ")).not.toMatch(/Despachos/);
   });
 });
 

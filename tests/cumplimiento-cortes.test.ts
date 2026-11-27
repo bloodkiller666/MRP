@@ -37,7 +37,7 @@ describe("cumplimiento contra el pronóstico del corte anterior", () => {
     expect(por("C").estado).toBe("sin-real");
     expect(feb.clientes[0].cuenta).toBe("D"); // el mayor desvío primero
   });
-  it("prefiere lo de «Resumen Despachos» (reales) sobre la columna de Base de datos", () => {
+  it("si el registro del corte guarda real, manda sobre la columna de Base de datos", () => {
     const [m] = cumplimientoContraCorteAnterior({
       "2026-01": { registros: [reg("A", { "2026-02": 4 * G })] },
       "2026-02": { registros: [reg("A", { "2026-02": 4 * G }, { "2026-02": 2 * G })] },

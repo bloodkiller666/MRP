@@ -1,6 +1,6 @@
 import { PERIODOS_STORAGE_KEY } from "./constants";
 import { enlazarDocumento, guardar } from "./persistencia";
-import { esClaveMes, mesesDePeriodo, PERIODO_INICIAL } from "./periodos";
+import { anioDeMes, esClaveMes, mesesDePeriodo, PERIODO_INICIAL, periodoAnual } from "./periodos";
 import type { Periodo } from "./types";
 
 /**
@@ -22,22 +22,22 @@ function notificar() {
   for (const oyente of oyentes) oyente();
 }
 
-/** Valida y ordena cronológicamente; descarta duplicados exactos y entradas corruptas. */
+/**
+ * Valida, lleva cada entrada a años completos y ordena cronológicamente; descarta
+ * duplicados y entradas corruptas. Así los periodos guardados antes por meses
+ * (p. ej. «Oct – Dic 2026») pasan a mostrarse como su año.
+ */
 function depurar(valor: unknown): Periodo[] {
   if (!Array.isArray(valor)) return [];
-  const vistos = new Set<string>();
-  const limpios: Periodo[] = [];
+  const anios = new Set<number>();
   for (const item of valor) {
     if (typeof item !== "object" || item === null) continue;
     const { desde, cantidad } = item as Partial<Periodo>;
     if (typeof desde !== "string" || !esClaveMes(desde)) continue;
     if (typeof cantidad !== "number" || !Number.isInteger(cantidad) || cantidad < 1 || cantidad > 12) continue;
-    const id = `${desde}/${cantidad}`;
-    if (vistos.has(id)) continue;
-    vistos.add(id);
-    limpios.push({ desde, cantidad });
+    for (const mes of mesesDePeriodo({ desde, cantidad })) anios.add(anioDeMes(mes));
   }
-  return limpios.sort((a, b) => a.desde.localeCompare(b.desde));
+  return [...anios].sort((a, b) => a - b).map(periodoAnual);
 }
 
 function establecer(siguiente: Periodo[]) {

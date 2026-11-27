@@ -7,14 +7,14 @@ import { normalizarTexto } from "./utils";
 
 /**
  * Controles de conciliación de un libro mensual: vuelven a leer el Excel por su cuenta (sumas por mes de «Base de
- * datos» y de «Resumen Despachos») y las comparan con lo que produjo el importador, y revisan la aritmética y los
- * valores atípicos de las hojas RESUMEN. No tocan la base de datos: se muestran antes de importar.
+ * datos»), las comparan con lo que produjo el importador, y revisan la aritmética y los valores atípicos de las
+ * hojas RESUMEN. No tocan la base de datos: se muestran antes de importar.
  */
 
 export type EstadoControl = "ok" | "difiere" | "aviso";
 
 export interface ControlConciliacion {
-  grupo: "Demanda (Base de datos)" | "Real por cliente (Resumen Despachos)" | "Hojas RESUMEN" | "Valores atípicos";
+  grupo: "Demanda (Base de datos)" | "Hojas RESUMEN" | "Valores atípicos";
   descripcion: string;
   esperado?: number;
   obtenido?: number;
@@ -100,53 +100,12 @@ function demandaDelExcel(XLSX: typeof import("xlsx"), libro: WorkBook, anio: str
   return salida;
 }
 
-/** Suma por mes de «Resumen Despachos» (cisternas) y la fila «Total general» de la propia hoja. */
-function despachosDelExcel(
-  XLSX: typeof import("xlsx"),
-  libro: WorkBook,
-): { suma: Record<MesKey, number>; total: Record<MesKey, number> | null } | null {
-  const filas = matriz(XLSX, libro, hojaLlamada(libro, "resumen despachos"));
-  const h = filas.findIndex((f, i) => i < 30 && normalizarTexto(f[0]) === "cuenta" && f.some((v) => normalizarTexto(v).startsWith("detalle produc")));
-  if (h < 0) return null;
-  const cab = filas[h];
-  const mesDe = (v: unknown): MesKey | null => {
-    if (v instanceof Date && !Number.isNaN(v.getTime())) {
-      const d = new Date(v.getTime() + 12 * 3600 * 1000);
-      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    }
-    const m = /^([a-z]{3,})\W*(\d{2}|\d{4})$/.exec(normalizarTexto(v));
-    if (!m || indiceMes(m[1]) < 0) return null;
-    return `${m[2].length === 2 ? "20" + m[2] : m[2]}-${String(indiceMes(m[1]) + 1).padStart(2, "0")}`;
-  };
-  const columnas: { c: number; mes: MesKey }[] = [];
-  for (let k = 0; k < cab.length; k++) {
-    const mes = mesDe(cab[k]);
-    if (mes) columnas.push({ c: k, mes });
-    else if (columnas.length > 0) break;
-  }
-  const suma: Record<MesKey, number> = {};
-  let total: Record<MesKey, number> | null = null;
-  for (const f of filas.slice(h + 1)) {
-    const cuenta = String(f[0] ?? "").trim();
-    if (!cuenta) continue;
-    const esTotal = /^total/i.test(cuenta);
-    if (esTotal) total = {};
-    for (const { c, mes } of columnas) {
-      const v = f[c];
-      if (!esNumero(v) || v <= 0) continue;
-      if (esTotal && total) total[mes] = v;
-      else suma[mes] = (suma[mes] ?? 0) + v;
-    }
-  }
-  return { suma, total };
-}
-
-function sumarPorMes(registros: RegistroMRP[], campo: "proyecciones" | "reales"): Record<MesKey, number> {
+function demandaImportada(registros: RegistroMRP[]): Record<MesKey, number> {
   const salida: Record<MesKey, number> = {};
   for (const r of registros) {
     const factor = factorACisternas(r);
     if (factor === null) continue;
-    for (const [mes, v] of Object.entries(r[campo])) if (v !== undefined) salida[mes] = (salida[mes] ?? 0) + v * factor;
+    for (const [mes, v] of Object.entries(r.proyecciones)) if (v !== undefined) salida[mes] = (salida[mes] ?? 0) + v * factor;
   }
   return salida;
 }
@@ -169,25 +128,13 @@ export function conciliarLibro(
   // 1) Demanda de «Base de datos»: suma por mes del Excel contra la de los registros importados.
   const demandaExcel = demandaDelExcel(XLSX, libro, mesCorte.slice(0, 4));
   if (demandaExcel) {
-    const importada = sumarPorMes(registros, "proyecciones");
+    const importada = demandaImportada(registros);
     for (const mes of [...new Set([...Object.keys(demandaExcel), ...Object.keys(importada)])].sort()) {
       controles.push(control("Demanda (Base de datos)", `Demanda de ${mes} (cisternas)`, demandaExcel[mes] ?? 0, importada[mes] ?? 0));
     }
   }
 
-  // 2) Real por cliente: suma de «Resumen Despachos» contra los reales importados, y contra su fila «Total general».
-  const despachos = despachosDelExcel(XLSX, libro);
-  if (despachos) {
-    const importados = sumarPorMes(registros, "reales");
-    for (const mes of [...new Set([...Object.keys(despachos.suma), ...Object.keys(importados)])].sort()) {
-      controles.push(control("Real por cliente (Resumen Despachos)", `Real de ${mes} (cisternas)`, despachos.suma[mes] ?? 0, importados[mes] ?? 0));
-      if (despachos.total && despachos.total[mes] !== undefined) {
-        controles.push(control("Real por cliente (Resumen Despachos)", `${mes}: suma de filas contra «Total general» de la hoja`, despachos.total[mes], despachos.suma[mes] ?? 0));
-      }
-    }
-  }
-
-  // 3) Aritmética de cada hoja RESUMEN: stock final = inicial + ingresos − consumo, y el inicial de un mes es el final del anterior.
+  // 2) Aritmética de cada hoja RESUMEN: stock final = inicial + ingresos − consumo, y el inicial de un mes es el final del anterior.
   let verificados = 0;
   const descuadres: ControlConciliacion[] = [];
   for (const s of series) {
@@ -218,7 +165,7 @@ export function conciliarLibro(
     }
   }
 
-  // 4) Valores atípicos: negativos o desproporcionados.
+  // 3) Valores atípicos: negativos o desproporcionados.
   const atipicos: ControlConciliacion[] = [];
   for (const s of series) {
     for (const [mes, m] of Object.entries(s.meses)) {
